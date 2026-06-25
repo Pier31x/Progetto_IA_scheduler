@@ -76,13 +76,22 @@ def compute_raw_satisfaction(worker: Worker, schedule: Schedule) -> float:
 
 def compute_min_max_possible(worker: Worker, schedule: Schedule) -> tuple[float, float]:
     """
-    Stima i valori min e max teorici di soddisfazione per un lavoratore,
-    usati per normalizzare lo score in [0, 1].
+    Calcola i valori min e max REALI di soddisfazione per un lavoratore,
+    basandosi sulle sue preferenze effettive — non su un caso peggiore/migliore
+    assoluto uguale per tutti.
 
-    - max_possible: tutti i turni assegnati sono quelli preferiti
-    - min_possible: tutti i turni assegnati sono quelli da evitare + notti
+    Problema della versione precedente: usare min=-2n e max=+n per tutti
+    schiacciava verso il basso i lavoratori con preferenze neutre, rendendoli
+    apparentemente meno soddisfatti di lavoratori con preferenze forti che
+    ricevevano esattamente gli stessi turni. Questo rendeva il confronto
+    Maximin non significativo.
 
-    Si usa il numero effettivo di turni assegnati come base.
+    Soluzione: il min e max sono calcolati come il pref_score peggiore e
+    migliore che questo specifico lavoratore potrebbe ricevere su n turni,
+    dati i suoi valori di preferred_shifts, avoid_shifts e night_tolerance.
+
+    - max_possible: n turni tutti del tipo che massimizza pref_score per lui
+    - min_possible: n turni tutti del tipo che minimizza pref_score per lui
     """
     assigned_shifts = schedule.get_worker_shifts(worker.worker_id)
     n = len(assigned_shifts)
@@ -90,11 +99,22 @@ def compute_min_max_possible(worker: Worker, schedule: Schedule) -> tuple[float,
     if n == 0:
         return 0.0, 0.0
 
-    # Score massimo: ogni turno è preferito → +1.0 ciascuno
-    max_possible = n * 1.0
+    from datetime import date as date_type
+    ref_day = date_type(2026, 12, 7)  # giorno di riferimento neutro (non festivo)
 
-    # Score minimo: ogni turno è da evitare e notturno con tolleranza 0
-    min_possible = n * (-1.0 - 1.0)  # avoid + notte con tolleranza 0
+    # Calcola il pref_score per ogni tipo di turno per questo lavoratore
+    scores_per_type = {s: pref_score(worker, ref_day, s) for s in SHIFT_TYPES}
+
+    best_score  = max(scores_per_type.values())
+    worst_score = min(scores_per_type.values())
+
+    max_possible = n * best_score
+    min_possible = n * worst_score
+
+    # Caso degenere: lavoratore completamente indifferente (tutti gli score uguali)
+    # → restituiamo un range artificiale per evitare divisione per zero
+    if max_possible == min_possible:
+        return min_possible - 1.0, max_possible + 1.0
 
     return min_possible, max_possible
 

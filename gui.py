@@ -292,7 +292,6 @@ def main():
                 export_to_csv(final_schedule, csv_path)
 
                 progress.progress(100, text="Completato.")
-                st.balloons()
                 st.info("📊 Vai al tab **Risultati** per visualizzare lo schedule.")
 
             except Exception as e:

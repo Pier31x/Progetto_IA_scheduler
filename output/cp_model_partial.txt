@@ -45,18 +45,18 @@ SMARTSCHEDULER — OR-Tools CP-SAT Model (Partial)
   standard: 13 workers
 
   Workers list:
-    W01 (standard): prefer=['morning', 'night'], avoid=['night'], night_tol=0.1
+    W01 (standard): prefer=[], avoid=[], night_tol=0.5
     W02 (standard): prefer=[], avoid=[], night_tol=0.5
-    W03 (standard): prefer=['afternoon', 'night'], avoid=[], night_tol=0.9
+    W03 (standard): prefer=[], avoid=[], night_tol=0.5
     W04 (standard): prefer=[], avoid=[], night_tol=0.5
-    W05 (standard): prefer=['morning', 'night'], avoid=[], night_tol=0.9
-    W06 (standard): prefer=['afternoon'], avoid=[], night_tol=0.5
+    W05 (standard): prefer=[], avoid=[], night_tol=0.5
+    W06 (standard): prefer=[], avoid=[], night_tol=0.5
     W07 (standard): prefer=[], avoid=[], night_tol=0.5
     W08 (standard): prefer=[], avoid=[], night_tol=0.5
     W09 (standard): prefer=[], avoid=[], night_tol=0.5
-    W10 (standard): prefer=['morning'], avoid=[], night_tol=0.5
+    W10 (standard): prefer=[], avoid=[], night_tol=0.5
     W11 (standard): prefer=[], avoid=[], night_tol=0.5
-    W12 (standard): prefer=['morning', 'afternoon', 'night'], avoid=['night'], night_tol=0.3
+    W12 (standard): prefer=[], avoid=[], night_tol=0.5
     W13 (standard): prefer=[], avoid=[], night_tol=0.5
 
 ======================================================================

@@ -48,3 +48,7 @@ PROJECT STRUCTURE
   output/
     cp_model_partial.txt     Modello CP-SAT leggibile (generato)
     schedule_use_case_*.csv  Schedule finale (generato)
+
+PER ESEGUIRE
+---------------
+streamlit run app.py (va eseguito su terminale)
