@@ -1,0 +1,35 @@
+# SmartScheduler — Model Draft
+# Use Case B: Heterogeneous Workers (Standard + Specialized)
+# This file is the institutional input to the SmartScheduler system.
+
+[SCHEDULING_HORIZON]
+start_date = 2026-12-07
+end_date   = 2027-01-06
+
+[SHIFTS]
+# Format: name | start_time | end_time | duration_hours | weight
+morning   | 08:00 | 14:00 | 6  | 1
+afternoon | 14:00 | 20:00 | 6  | 1
+night     | 20:00 | 08:00 | 12 | 2
+
+[WORKFORCE]
+# Use Case B: workers are either "standard" or "specialized".
+# A specialized worker CAN cover the standard role if needed,
+# but a standard worker CANNOT cover the specialized role.
+total_workers      = 20
+roles              = standard:13, specialized:7
+
+[COVERAGE_REQUIREMENTS]
+# Minimum per shift per day, by role.
+# Format: shift_type | min_standard | min_specialized
+# Note: specialized workers covering the standard role count toward min_standard.
+morning   | 2 | 1
+afternoon | 2 | 1
+night     | 2 | 1
+
+[HARD_CONSTRAINTS]
+max_hours_per_week    | 36   | Maximum working hours per worker per week
+shifts_per_month      | 25   | Each worker covers exactly 25 shift-units (night = 2)
+rest_days_after_night | 2    | Mandatory rest days after each night shift
+max_shifts_per_day    | 1    | At most one shift per worker per day
+no_consecutive_shifts | true | No back-to-back shifts across adjacent days

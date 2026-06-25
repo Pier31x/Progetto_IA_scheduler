@@ -1,0 +1,105 @@
+{
+  "use_case": "B",
+  "workers": [
+    {
+      "worker_id": "W01",
+      "role": "standard",
+      "statement": "I prefer morning shifts and would like Sundays off. I really dislike night shifts."
+    },
+    {
+      "worker_id": "W02",
+      "role": "standard",
+      "statement": "I am fine with any shift. I would appreciate at least one Saturday off per month."
+    },
+    {
+      "worker_id": "W03",
+      "role": "standard",
+      "statement": "I prefer afternoon shifts. Night shifts are very hard for me."
+    },
+    {
+      "worker_id": "W04",
+      "role": "standard",
+      "statement": "No strong preferences, but I would like Mondays off if possible."
+    },
+    {
+      "worker_id": "W05",
+      "role": "standard",
+      "statement": "I prefer morning shifts. I can handle night shifts twice a month at most."
+    },
+    {
+      "worker_id": "W06",
+      "role": "standard",
+      "statement": "I prefer working afternoons. Available for emergency coverage twice a month."
+    },
+    {
+      "worker_id": "W07",
+      "role": "standard",
+      "statement": "I would like Fridays and Saturdays off. I can work any shift type."
+    },
+    {
+      "worker_id": "W08",
+      "role": "standard",
+      "statement": "Indifferent to shift types but strongly prefer not to work on Sundays."
+    },
+    {
+      "worker_id": "W09",
+      "role": "standard",
+      "statement": "Night shifts are fine for me. I actually prefer them."
+    },
+    {
+      "worker_id": "W10",
+      "role": "standard",
+      "statement": "I prefer morning shifts and would like Wednesdays off."
+    },
+    {
+      "worker_id": "W11",
+      "role": "standard",
+      "statement": "I have no strong preferences. I am flexible with any schedule."
+    },
+    {
+      "worker_id": "W12",
+      "role": "standard",
+      "statement": "I prefer afternoon and morning shifts. I would like to avoid nights when possible."
+    },
+    {
+      "worker_id": "W13",
+      "role": "standard",
+      "statement": "I am fine with any shift. I prefer not to work on consecutive days."
+    },
+    {
+      "worker_id": "S01",
+      "role": "specialized",
+      "statement": "I am a specialist and can cover any shift. I prefer mornings but am flexible."
+    },
+    {
+      "worker_id": "S02",
+      "role": "specialized",
+      "statement": "I prefer not to work nights as a specialist. Mornings and afternoons are fine."
+    },
+    {
+      "worker_id": "S03",
+      "role": "specialized",
+      "statement": "I am flexible with shifts. I would like at least one weekend day off per week."
+    },
+    {
+      "worker_id": "S04",
+      "role": "specialized",
+      "statement": "I prefer afternoon shifts. Night coverage is acceptable but not ideal."
+    },
+    {
+      "worker_id": "S05",
+      "role": "specialized",
+      "statement": "I have no particular preferences. Available for any shift whenever needed."
+    },
+    {
+      "worker_id": "S06",
+      "role": "specialized",
+      "statement": "I prefer mornings. I strongly dislike night shifts."
+    },
+    {
+      "worker_id": "S07",
+      "role": "specialized",
+      "statement": "I can cover any shift. I would like Sundays off when possible."
+    }
+  ]
+}
