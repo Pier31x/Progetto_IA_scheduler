@@ -63,27 +63,14 @@ def all_days(start, end):
 # ── Calendario HTML ───────────────────────────────────────────────────────────
 
 def render_calendar(schedule) -> str:
-    """
-    Genera un calendario mensile in HTML puro.
-
-    Scelta progettuale: usiamo st.html() con HTML/CSS inline invece
-    di una libreria esterna. Questo evita dipendenze aggiuntive e
-    ci dà controllo completo sul layout.
-
-    Il calendario mostra 7 colonne (Lun–Dom). Ogni cella contiene
-    i turni del giorno con i lavoratori assegnati, colorati per tipo.
-    """
     from config.scenario import SCHEDULE_START, SCHEDULE_END
     days = all_days(SCHEDULE_START, SCHEDULE_END)
 
-    # Raggruppa assegnazioni per giorno
     day_data: dict[date, dict[str, list[str]]] = {}
     for (wid, day, shift), assigned in schedule.assignments.items():
         if assigned:
             day_data.setdefault(day, {}).setdefault(shift, []).append(wid)
 
-    # Costruiamo settimane (righe del calendario)
-    # Troviamo il lunedì della prima settimana
     first_monday = days[0] - timedelta(days=days[0].weekday())
     last_sunday  = days[-1] + timedelta(days=(6 - days[-1].weekday()))
     weeks = []
@@ -111,12 +98,10 @@ def render_calendar(schedule) -> str:
         font-size: 12px; font-weight: bold; color: #555;
         margin-bottom: 4px; text-align: right;
     }
-    .cal-day-num.today { color: #1A3A6B; }
     .shift-block {
         border-radius: 4px; padding: 3px 5px;
         margin-bottom: 3px; font-size: 10px;
-        border-left: 3px solid;
-        line-height: 1.4;
+        border-left: 3px solid; line-height: 1.4;
     }
     .shift-label { font-weight: bold; margin-bottom: 2px; }
     .worker-list { color: #333; }
@@ -131,7 +116,6 @@ def render_calendar(schedule) -> str:
             cell_class = "cal-cell" if in_range else "cal-cell other-month"
             rows_html += f'<td class="{cell_class}">'
             rows_html += f'<div class="cal-day-num">{day.day}</div>'
-
             if in_range and day in day_data:
                 for shift_type in ["morning", "afternoon", "night"]:
                     workers_on = day_data[day].get(shift_type, [])
@@ -145,12 +129,10 @@ def render_calendar(schedule) -> str:
                         <div class="shift-label">{c['label']}</div>
                         <div class="worker-list">{workers_str}</div>
                     </div>"""
-
             rows_html += "</td>"
         rows_html += "</tr>"
 
     header_html = "".join(f"<th>{d}</th>" for d in day_names)
-
     return f"""
     {css}
     <div class="cal-wrap">
@@ -161,17 +143,15 @@ def render_calendar(schedule) -> str:
     </div>
     """
 
-# ── Legenda ───────────────────────────────────────────────────────────────────
-
 def render_legend() -> str:
     items = "".join(
-        f"""<span style="
+        f'''<span style="
             display:inline-flex; align-items:center; gap:6px;
             background:{c['bg']}; border-left:4px solid {c['border']};
             border-radius:4px; padding:4px 10px; font-size:13px;
             font-family:Arial; margin-right:10px;">
             {c['label']}
-        </span>"""
+        </span>'''
         for c in SHIFT_COLORS.values()
     )
     return f'<div style="margin-bottom:12px">{items}</div>'
@@ -182,7 +162,6 @@ def main():
     st.title("🏥 SmartScheduler")
     st.caption("Fair and Constraint-Aware Hospital Shift Scheduling")
 
-    # Sidebar
     with st.sidebar:
         st.header("⚙️ Configurazione")
         use_case = st.radio(
@@ -195,37 +174,47 @@ def main():
         )
         draft_path   = os.path.join(ROOT, "input", f"model_draft_use_case_{use_case.lower()}.txt")
         workers_path = os.path.join(ROOT, "input", f"workers_use_case_{use_case.lower()}.json")
-        use_llm      = st.toggle("Usa LLaMA (richiede Ollama)", value=False)
+        use_llm      = st.toggle("Usa LLaMA (richiede Ollama)", value=True)
         st.divider()
         st.caption("Output salvato in `output/` dopo l'esecuzione.")
 
     tab_input, tab_run, tab_results = st.tabs(["📄 Input", "▶️ Esecuzione", "📊 Risultati"])
 
-    # ── TAB INPUT ─────────────────────────────────────────────────────────────
     with tab_input:
         st.subheader("Model Draft Istituzionale")
         st.caption("Turni, forza lavoro e vincoli legali. Salva prima di eseguire.")
-        draft_content = st.text_area("model_draft.txt", value=load_file(draft_path), height=260, key="draft_ed")
-        if st.button("💾 Salva model draft"):
+        # La key include use_case: quando si cambia caso A↔B Streamlit crea
+        # un nuovo widget e usa value=load_file(...) come default, invece
+        # di conservare il contenuto del caso precedente in session_state.
+        draft_content = st.text_area(
+            "model_draft.txt",
+            value=load_file(draft_path),
+            height=260,
+            key=f"draft_ed_{use_case}",
+        )
+        if st.button("💾 Salva model draft", key=f"btn_draft_{use_case}"):
             save_file(draft_path, draft_content)
             st.success("Salvato.")
 
         st.divider()
         st.subheader("Preferenze Lavoratori")
         st.caption(
-            "Statement in linguaggio naturale. "
-            "Con LLaMA puoi scrivere liberamente; "
-            "col fallback usa keyword come *prefer*, *avoid*, *morning*, *saturday off*…"
+            "Statement in linguaggio naturale interpretato da LLaMA. "
+            "In modalità --fallback le preferenze sono neutre (nessuna estrazione)."
         )
-        workers_content = st.text_area("workers.json", value=load_file(workers_path), height=380, key="workers_ed")
-        if st.button("💾 Salva preferenze"):
+        workers_content = st.text_area(
+            "workers.json",
+            value=load_file(workers_path),
+            height=380,
+            key=f"workers_ed_{use_case}",
+        )
+        if st.button("💾 Salva preferenze", key=f"btn_workers_{use_case}"):
             save_file(workers_path, workers_content)
             st.success("Salvato.")
 
-    # ── TAB ESECUZIONE ────────────────────────────────────────────────────────
     with tab_run:
         st.subheader("Avvia il sistema")
-        mode = "LLaMA (Ollama)" if use_llm else "Rule-based fallback"
+        mode = "LLaMA (Ollama)" if use_llm else "Rule-based keyword parser"
         st.info(
             f"**Use Case {use_case}** · Modalità: **{mode}**\n\n"
             f"- Draft: `{os.path.basename(draft_path)}`\n"
@@ -243,7 +232,33 @@ def main():
 
             prog = st.progress(0, text="Inizializzazione…")
             try:
-                prog.progress(10, text="Stage 1 — Raccolta preferenze…")
+                # ── Controllo LLM (Stage 0) ───────────────────────────────────
+                prog.progress(5, text="Verifica disponibilità LLM…")
+                from agents.preference_agent import check_llm_availability
+
+                if use_llm:
+                    with st.spinner("Connessione a Ollama in corso…"):
+                        llm_ok, llm_msg = check_llm_availability()
+                    if not llm_ok:
+                        st.error(
+                            f"❌ LLM non disponibile: **{llm_msg}**\n\n"
+                            "**Come risolvere:**\n"
+                            "1. Avviare Ollama:  `ollama serve`\n"
+                            "2. Scaricare il modello:  `ollama pull llama3`\n"
+                            "3. Riprovare\n\n"
+                            "Oppure disabilitare il toggle **'Usa LLaMA'** nella sidebar "
+                            "per usare il parser rule-based (senza IA)."
+                        )
+                        st.stop()
+                    st.success(f"✅ {llm_msg}")
+                else:
+                    st.warning(
+                        "⚠️ LLaMA disabilitato. Le preferenze saranno estratte con "
+                        "keyword matching (rule-based). Il sistema non è in modalità IA completa."
+                    )
+
+                # ── Stage 1: Preference Agent ─────────────────────────────────
+                prog.progress(15, text="Stage 1 — Raccolta preferenze…")
                 from agents.preference_agent import load_and_extract
                 workers, _ = load_and_extract(workers_path, force_fallback=not use_llm)
                 st.success(f"✅ Stage 1 — {len(workers)} lavoratori processati")
@@ -296,7 +311,6 @@ def main():
             with st.expander("📋 Log completo"):
                 st.code(handler.get_log_text(), language=None)
 
-    # ── TAB RISULTATI ─────────────────────────────────────────────────────────
     with tab_results:
         if "final_schedule" not in st.session_state:
             st.info("Nessuno schedule disponibile. Vai al tab **Esecuzione** e avvia il sistema.")
@@ -307,7 +321,6 @@ def main():
         uc_label  = st.session_state.get("use_case", "A")
         scores    = schedule.satisfaction_scores
 
-        # ── Metriche ──────────────────────────────────────────────────────────
         st.subheader("Punteggi di Soddisfazione")
         min_w = schedule.least_satisfied_worker()
         min_s = schedule.min_satisfaction()
@@ -325,13 +338,11 @@ def main():
         )
         st.bar_chart(score_df.set_index("Lavoratore"), color="#2E75B6")
 
-        # ── Calendario ────────────────────────────────────────────────────────
         st.divider()
         st.subheader("📅 Calendario")
         st.html(render_legend())
         st.html(render_calendar(schedule))
 
-        # ── Tabella pivot ─────────────────────────────────────────────────────
         st.divider()
         st.subheader("Tabella Turni")
         from config.scenario import SCHEDULE_START, SCHEDULE_END
@@ -345,7 +356,6 @@ def main():
             rows.append(row)
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-        # ── Download ──────────────────────────────────────────────────────────
         st.divider()
         st.subheader("Download")
         c1, c2 = st.columns(2)

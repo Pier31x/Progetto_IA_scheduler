@@ -4,9 +4,11 @@ main.py
 Entry point di SmartScheduler.
 
 Flusso completo:
+    0. Controllo LLM — verifica che Ollama + LLaMA siano disponibili
+       (obbligatorio a meno che non sia specificato --fallback)
     1. Legge il model draft istituzionale (file .txt)
     2. Legge le preferenze dei lavoratori (file .json)
-    3. Stage 1 — Preference Agent: NL → Worker objects
+    3. Stage 1 — Preference Agent: NL → Worker objects (via LLM o rule-based)
     4. Stage 2 — Drafting Agent: OR-Tools solve (+ export modello parziale)
     5. Stage 3 — Verification Agent: verifica hard + fairness
        → se fallisce: retry al Drafting Agent con feedback (max MAX_DRAFT_RETRIES)
@@ -14,7 +16,8 @@ Flusso completo:
     7. Output: stampa a schermo + CSV
 
 Uso:
-    python main.py --use-case A --fallback
+    python main.py --use-case A               # richiede Ollama + llama3
+    python main.py --use-case A --fallback    # rule-based parser (no LLM)
     python main.py --use-case B
     python main.py --draft input/model_draft_use_case_a.txt --workers input/workers_use_case_a.json
 """
@@ -27,7 +30,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from input.model_draft_parser import parse_model_draft
-from agents.preference_agent import load_and_extract
+from agents.preference_agent import load_and_extract, check_llm_availability
 from agents.drafting_agent import solve
 from agents.verification_agent import verify, evaluate_fairness
 from agents.refinement_agent import refine
@@ -40,7 +43,52 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
-MAX_DRAFT_RETRIES = 3  # tentativi massimi se la verifica fallisce
+MAX_DRAFT_RETRIES = 3
+
+
+def _check_llm_or_exit(force_fallback: bool) -> None:
+    """
+    Verifica la disponibilità di Ollama e del modello LLaMA prima
+    di avviare il sistema.
+
+    Se force_fallback è True, il controllo viene saltato e viene
+    stampato un avviso che informa l'utente che le preferenze
+    saranno estratte senza LLM.
+
+    Se force_fallback è False e il modello non è disponibile, il
+    programma termina con un messaggio d'errore chiaro che indica
+    come risolvere il problema (ollama serve + ollama pull llama3).
+
+    Scelta progettuale: il controllo è fatto PRIMA di qualsiasi
+    lettura di file o elaborazione, in modo che l'utente riceva il
+    feedback immediatamente senza attendere l'esecuzione degli stage.
+    """
+    if force_fallback:
+        logger.warning(
+            "Modalità --fallback attiva: le preferenze saranno estratte "
+            "tramite rule-based parser (senza LLM). "
+            "Il sistema non è in modalità IA completa."
+        )
+        return
+
+    logger.info("Verifica disponibilità LLM (Ollama + llama3)...")
+    available, message = check_llm_availability()
+
+    if available:
+        logger.info(f"LLM disponibile: {message}")
+    else:
+        logger.error(
+            f"LLM non disponibile: {message}\n"
+            "\n"
+            "Per avviare il sistema in modalità IA completa:\n"
+            "  1. Avviare Ollama:          ollama serve\n"
+            "  2. Scaricare il modello:    ollama pull llama3\n"
+            "  3. Riprovare:               python main.py --use-case A\n"
+            "\n"
+            "Per avviare senza LLM (rule-based parser):\n"
+            "  python main.py --use-case A --fallback"
+        )
+        sys.exit(1)
 
 
 def run(
@@ -50,6 +98,9 @@ def run(
 ) -> None:
 
     os.makedirs("output", exist_ok=True)
+
+    # ── Stage 0: Controllo LLM ─────────────────────────────────────────────────
+    _check_llm_or_exit(force_fallback)
 
     # ── Lettura input istituzionale ────────────────────────────────────────────
     logger.info(f"Lettura model draft: {draft_file}")
@@ -78,7 +129,6 @@ def run(
     for attempt in range(1, MAX_DRAFT_RETRIES + 1):
         logger.info(f"=== Stage 2: Drafting (tentativo {attempt}/{MAX_DRAFT_RETRIES}) ===")
 
-        # Esporta il modello parziale al primo tentativo
         model_export = "output/cp_model_partial.txt" if attempt == 1 else None
 
         schedule = solve(
@@ -137,8 +187,14 @@ if __name__ == "__main__":
     parser.add_argument("--use-case", choices=["A", "B"], default="A")
     parser.add_argument("--draft", default=None, help="Percorso al model draft .txt")
     parser.add_argument("--workers", default=None, help="Percorso al file workers .json")
-    parser.add_argument("--fallback", action="store_true",
-                        help="Usa parser rule-based invece di LLaMA")
+    parser.add_argument(
+        "--fallback",
+        action="store_true",
+        help=(
+            "Usa rule-based parser invece di LLaMA per estrarre le preferenze. "
+            "Non richiede Ollama. Le preferenze vengono estratte tramite keyword matching."
+        ),
+    )
     args = parser.parse_args()
 
     uc = args.use_case.upper()
