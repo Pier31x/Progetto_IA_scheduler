@@ -4,102 +4,102 @@
     {
       "worker_id": "W01",
       "role": "standard",
-      "statement": "I prefer morning shifts and would like Sundays off. I really dislike night shifts."
+      "statement": "Preferisco i turni mattutini e vorrei avere la domenica libera. I turni notturni non mi piacciono per niente."
     },
     {
       "worker_id": "W02",
       "role": "standard",
-      "statement": "I am fine with any shift. I would appreciate at least one Saturday off per month."
+      "statement": "Sono disponibile per qualsiasi turno. Apprezzerei almeno un sabato libero al mese."
     },
     {
       "worker_id": "W03",
       "role": "standard",
-      "statement": "I prefer afternoon shifts. Night shifts are very hard for me."
+      "statement": "Preferisco i turni pomeridiani. I turni notturni sono molto difficili per me."
     },
     {
       "worker_id": "W04",
       "role": "standard",
-      "statement": "No strong preferences, but I would like Mondays off if possible."
+      "statement": "Non ho preferenze particolari, ma vorrei avere il lunedì libero se possibile."
     },
     {
       "worker_id": "W05",
       "role": "standard",
-      "statement": "I prefer morning shifts. I can handle night shifts twice a month at most."
+      "statement": "Preferisco i turni mattutini. Al massimo riesco a fare i turni notturni due volte al mese."
     },
     {
       "worker_id": "W06",
       "role": "standard",
-      "statement": "I prefer working afternoons. Available for emergency coverage twice a month."
+      "statement": "Preferisco lavorare di pomeriggio. Sono disponibile per coperture di emergenza due volte al mese."
     },
     {
       "worker_id": "W07",
       "role": "standard",
-      "statement": "I would like Fridays and Saturdays off. I can work any shift type."
+      "statement": "Vorrei avere il venerdì e il sabato liberi. Posso lavorare qualsiasi tipo di turno."
     },
     {
       "worker_id": "W08",
       "role": "standard",
-      "statement": "Indifferent to shift types but strongly prefer not to work on Sundays."
+      "statement": "Sono indifferente al tipo di turno ma preferisco fortemente non lavorare la domenica."
     },
     {
       "worker_id": "W09",
       "role": "standard",
-      "statement": "Night shifts are fine for me. I actually prefer them."
+      "statement": "I turni notturni vanno bene per me. In realtà li preferisco."
     },
     {
       "worker_id": "W10",
       "role": "standard",
-      "statement": "I prefer morning shifts and would like Wednesdays off."
+      "statement": "Preferisco i turni mattutini e vorrei avere il mercoledì libero."
     },
     {
       "worker_id": "W11",
       "role": "standard",
-      "statement": "I have no strong preferences. I am flexible with any schedule."
+      "statement": "Non ho preferenze particolari. Sono flessibile con qualsiasi orario."
     },
     {
       "worker_id": "W12",
       "role": "standard",
-      "statement": "I prefer afternoon and morning shifts. I would like to avoid nights when possible."
+      "statement": "Preferisco i turni pomeridiani e mattutini. Vorrei evitare i notturni quando possibile."
     },
     {
       "worker_id": "W13",
       "role": "standard",
-      "statement": "I am fine with any shift. I prefer not to work on consecutive days."
+      "statement": "Sono disponibile per qualsiasi turno. Preferisco non lavorare in giorni consecutivi."
     },
     {
       "worker_id": "S01",
       "role": "specialized",
-      "statement": "I am a specialist and can cover any shift. I prefer mornings but am flexible."
+      "statement": "Sono uno specializzato e posso coprire qualsiasi turno. Preferisco il mattino ma sono flessibile."
     },
     {
       "worker_id": "S02",
       "role": "specialized",
-      "statement": "I prefer not to work nights as a specialist. Mornings and afternoons are fine."
+      "statement": "Come specializzato preferisco non fare turni notturni. Mattino e pomeriggio vanno bene."
     },
     {
       "worker_id": "S03",
       "role": "specialized",
-      "statement": "I am flexible with shifts. I would like at least one weekend day off per week."
+      "statement": "Sono flessibile con i turni. Vorrei almeno un giorno libero nel fine settimana ogni settimana."
     },
     {
       "worker_id": "S04",
       "role": "specialized",
-      "statement": "I prefer afternoon shifts. Night coverage is acceptable but not ideal."
+      "statement": "Preferisco i turni pomeridiani. La copertura notturna è accettabile ma non ideale."
     },
     {
       "worker_id": "S05",
       "role": "specialized",
-      "statement": "I have no particular preferences. Available for any shift whenever needed."
+      "statement": "Non ho preferenze particolari. Sono disponibile per qualsiasi turno quando serve."
     },
     {
       "worker_id": "S06",
       "role": "specialized",
-      "statement": "I prefer mornings. I strongly dislike night shifts."
+      "statement": "Preferisco il mattino. I turni notturni mi pesano molto."
     },
     {
       "worker_id": "S07",
       "role": "specialized",
-      "statement": "I can cover any shift. I would like Sundays off when possible."
+      "statement": "Posso coprire qualsiasi turno. Vorrei avere la domenica libera quando possibile."
     }
   ]
 }

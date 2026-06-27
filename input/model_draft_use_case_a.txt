@@ -1,41 +1,41 @@
 # SmartScheduler — Model Draft
-# Use Case A: Homogeneous Workers
-# This file is the institutional input to the SmartScheduler system.
-# It describes the structural parameters of the scheduling problem:
-# available shifts, workforce composition, and hard legal constraints.
-# Worker personal preferences are collected separately (see workers_use_case_a.json).
+# Caso d'uso A: Lavoratori omogenei
+# Questo file è l'input istituzionale del sistema SmartScheduler.
+# Descrive i parametri strutturali del problema di scheduling:
+# turni disponibili, composizione della forza lavoro e vincoli hard legali.
+# Le preferenze personali dei lavoratori sono raccolte separatamente (vedi workers_use_case_a.json).
 
 [SCHEDULING_HORIZON]
 start_date = 2026-12-07
 end_date   = 2027-01-06
 
 [SHIFTS]
-# Format: name | start_time | end_time | duration_hours | weight
-# Weight = number of "shift units" this shift counts toward the monthly quota.
-# The night shift counts double because of its extended duration (12h vs 6h).
+# Formato: nome | orario_inizio | orario_fine | durata_ore | peso
+# Peso = numero di "unità turno" che questo turno conta ai fini della quota mensile.
+# Il turno notturno conta doppio per la sua durata estesa (12h vs 6h).
 morning   | 08:00 | 14:00 | 6  | 1
 afternoon | 14:00 | 20:00 | 6  | 1
 night     | 20:00 | 08:00 | 12 | 2
 
 [WORKFORCE]
-# Use Case A: all workers are homogeneous (no role distinction).
-# Every shift can be covered by any worker.
+# Caso d'uso A: tutti i lavoratori sono omogenei (nessuna distinzione di ruolo).
+# Qualsiasi turno può essere coperto da qualsiasi lavoratore.
 total_workers = 13
 roles         = standard:13
 
 [COVERAGE_REQUIREMENTS]
-# Minimum number of workers required per shift per day.
-# Format: shift_type | min_workers
+# Numero minimo di lavoratori richiesti per turno per giorno.
+# Formato: tipo_turno | min_lavoratori
 morning   | 2
 afternoon | 2
 night     | 2
 
 [HARD_CONSTRAINTS]
-# Legal and institutional requirements. These are non-negotiable.
-# Format: constraint_name | value | description
+# Requisiti legali e istituzionali. Non negoziabili.
+# Formato: nome_vincolo | valore | descrizione
 
-max_hours_per_week    | 36  | Maximum working hours per worker per week (legal limit)
-shifts_per_month      | 25  | Each worker must cover exactly 25 shift-units per month (night = 2 units)
-rest_days_after_night | 2   | Mandatory rest days following each night shift (recovery requirement)
-max_shifts_per_day    | 1   | A worker can cover at most one shift per calendar day
-no_consecutive_shifts | true| A worker cannot cover two back-to-back shifts (e.g., afternoon then next-day morning)
+max_hours_per_week    | 36  | Ore lavorative massime per lavoratore per settimana (limite legale)
+shifts_per_month      | 25  | Ogni lavoratore deve coprire esattamente 25 unità-turno al mese (notte = 2 unità)
+rest_days_after_night | 2   | Giorni di riposo obbligatori dopo ogni turno notturno (recupero)
+max_shifts_per_day    | 1   | Un lavoratore può coprire al massimo un turno per giorno solare
+no_consecutive_shifts | true| Un lavoratore non può coprire due turni consecutivi (es. pomeriggio poi mattino del giorno dopo)
