@@ -1,21 +1,5 @@
 """
-app.py
-
-Interfaccia web Streamlit per SmartScheduler.
-
-Scelta progettuale: Streamlit è preferibile a tkinter per questo
-contesto perché:
-1. L'interfaccia è nel browser — più presentabile e familiare
-2. I componenti (tabelle, grafici, log) sono già integrati
-3. Non richiede gestione manuale dei thread per aggiornare la UI
-4. È una dipendenza standard nell'ecosistema data science / AI
-
-L'app non reimplementa nessuna logica del sistema: chiama le stesse
-funzioni di main.py, ma intercetta i risultati intermedi per
-visualizzarli in modo strutturato invece di stamparli su terminale.
-
-Avvio:
-    streamlit run app.py
+deprecato, da togliere dal github
 """
 
 import io
