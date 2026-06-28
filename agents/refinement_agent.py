@@ -76,22 +76,30 @@ def refine(
         new_scores = new_schedule.satisfaction_scores
         new_global_min = min(new_scores.values())
 
+        # Verifichiamo se l'agente simbolico (fairness.py) approva il passo
         if is_fairness_improvement(old_scores, new_scores, target_id):
-            if new_global_min <= old_global_min:
+            # Tolleranza float per evitare micro-oscillazioni numeriche (1e-4)
+            if new_global_min < old_global_min - 1e-4:
                 logger.info(
-                    f"[Iter {iteration}] Oscillazione rilevata: "
-                    f"min globale non migliora ({old_global_min:.3f} → {new_global_min:.3f}). "
-                    f"Convergenza."
+                    f"[Iter {iteration}] Rifiutato: il minimo globale è peggiorato "
+                    f"({old_global_min:.3f} → {new_global_min:.3f})."
                 )
                 break
+
             logger.info(
-                f"[Iter {iteration}] Accettato: {target_id} "
-                f"{old_scores[target_id]:.3f}→{new_scores[target_id]:.3f} | "
-                f"min globale {old_global_min:.3f}→{new_global_min:.3f}"
+                f"[Iter {iteration}] Accettato: Lavoratore {target_id} migliorato "
+                f"({old_scores[target_id]:.3f} → {new_scores[target_id]:.3f}) | "
+                f"Min globale: {old_global_min:.3f} → {new_global_min:.3f}"
             )
             current = new_schedule
+
+            # Se il guadagno complessivo sul minimo reale è nullo o inferiore alla tolleranza,
+            # consideriamo il sistema stabilizzato dopo aver salvato il progresso sul target.
+            if new_global_min <= old_global_min + 1e-4:
+                logger.info(f"[Iter {iteration}] Stabilizzazione del minimo raggiunta. Convergenza.")
+                break
         else:
-            logger.info(f"[Iter {iteration}] No Maximin improvement. Convergenza.")
+            logger.info(f"[Iter {iteration}] Nessun miglioramento per il target {target_id}. Convergenza.")
             break
 
     logger.info(f"Refinement completato. Min finale: {current.min_satisfaction():.3f}")

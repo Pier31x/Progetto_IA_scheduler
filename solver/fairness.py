@@ -195,3 +195,111 @@ def is_fairness_improvement(
             return False
 
     return True
+
+
+def compute_equity_metrics(schedule: Schedule, workers: List[Worker] = None) -> Dict[str, any]:
+    """
+    Calcola le metriche aggregate e puntuali oggettive/soggettive sullo schedule.
+    Soddisfa tutti i requisiti di log e i widget/grafici di app.py.
+    """
+    # 1. Recupero dei lavoratori se non passati direttamente
+    if workers is None:
+        if hasattr(schedule, 'workers') and schedule.workers:
+            workers = schedule.workers
+        elif hasattr(schedule, 'get_all_workers'):
+            workers = schedule.get_all_workers()
+        else:
+            worker_ids = set(assignment.worker_id for assignment in schedule.assignments)
+            workers = [Worker(worker_id=wid, role="standard") for wid in worker_ids]
+
+    # 2. Calcolo metriche OGGETTIVE (Mappatura dei turni notturni per ID)
+    night_counts_dict = {}
+    for w in workers:
+        shifts = schedule.get_worker_shifts(w.worker_id)
+        nights = sum(1 for s in shifts if s.shift_type.lower() == "night")
+        night_counts_dict[w.worker_id] = nights
+
+    night_values = list(night_counts_dict.values())
+    n_workers = len(night_values)
+
+    if n_workers == 0:
+        return {
+            "std_nights": 0.0, "gini_nights": 0.0,
+            "min_nights": 0.0, "max_nights": 0.0,
+            "min_satisfaction": 0.0, "avg_satisfaction": 0.0,
+            "night_counts": {}
+        }
+
+    min_nights = min(night_values)
+    max_nights = max(night_values)
+
+    # Deviazione Standard delle Notti
+    avg_nights = sum(night_values) / n_workers
+    var_nights = sum((x - avg_nights) ** 2 for x in night_values) / n_workers
+    std_nights = var_nights ** 0.5
+
+    # Indice di Gini delle Notti
+    sorted_nights = sorted(night_values)
+    if sum(sorted_nights) == 0:
+        gini_nights = 0.0
+    else:
+        cumulative_sum = sum((i + 1) * x for i, x in enumerate(sorted_nights))
+        gini_nights = (2 * cumulative_sum) / (n_workers * sum(sorted_nights)) - (n_workers + 1) / n_workers
+
+    # 3. Calcolo metriche SOGGETTIVE (Soddisfazione normalizzata)
+    scores = compute_satisfaction_scores(workers, schedule)
+    values = list(scores.values())
+    avg_sat = sum(values) / len(values) if values else 0.0
+    min_sat = min(values) if values else 0.0
+
+    violations_data = compute_preference_violations(workers, schedule)
+
+    return {
+        "std_nights": round(std_nights, 4),
+        "gini_nights": round(gini_nights, 4),
+        "min_nights": int(min_nights),
+        "max_nights": int(max_nights),
+        "min_satisfaction": round(min_sat, 4),
+        "avg_satisfaction": round(avg_sat, 4),
+        "night_counts": night_counts_dict,
+        "violations": violations_data
+    }
+
+
+def compute_preference_violations(workers: list[Worker], schedule: Schedule) -> dict:
+    """
+    Conta quante volte il sistema assegna turni esplicitamente evitati
+    o lavora nei giorni di riposo preferiti, sia per singolo lavoratore che globalmente.
+    """
+    violations_dict = {}
+    total_avoid_violations = 0
+    total_day_off_violations = 0
+
+    for w in workers:
+        shifts = schedule.get_worker_shifts(w.worker_id)
+
+        # Conteggio violazioni sui turni da evitare
+        avoid_assigned = sum(1 for s in shifts if s.shift_type in w.avoid_shifts)
+
+        # Conteggio violazioni sui giorni liberi preferiti
+        day_off_violated = sum(1 for s in shifts if s.day.strftime("%A").lower() in w.preferred_days_off)
+
+        # Accumulo per i totali globali
+        total_avoid_violations += avoid_assigned
+        total_total_day_off_violations = total_day_off_violations + day_off_violated  # Rinomina per chiarezza se serve, o usa l'accumulatore sotto:
+        total_day_off_violations += day_off_violated
+
+        # Mappatura del singolo lavoratore
+        violations_dict[w.worker_id] = {
+            "avoid_shifts_violations": avoid_assigned,
+            "days_off_violations": day_off_violated,
+            "total_violations": avoid_assigned + day_off_violated
+        }
+
+    # Struttura finale corretta attesa da app.py
+    return {
+        "per_worker": violations_dict,
+        "global_avoid_violations": total_avoid_violations,
+        "global_day_off_violations": total_day_off_violations,
+        "global_total_violations": total_avoid_violations + total_day_off_violations
+    }

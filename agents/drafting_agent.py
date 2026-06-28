@@ -32,34 +32,69 @@ logger = logging.getLogger(__name__)
 SOLVER_TIMEOUT_SECONDS = 180  # aumentato per istanze più grandi (13+ lavoratori)
 
 
+def _has_real_preferences(workers: List[Worker]) -> bool:
+    """
+    Restituisce True se almeno un lavoratore ha preferenze non neutre.
+
+    Scelta progettuale: con Worker tutti neutri (preferred_shifts=[],
+    avoid_shifts=[], night_tolerance=0.5), pref_score produce -0.5
+    per ogni notte — non per una preferenza dichiarata ma come
+    artefatto della formula con tolleranza di default. Aggiungere
+    questo termine all'obiettivo non rappresenta alcuna preferenza
+    reale e distorce il confronto.
+
+    Quando tutti i Worker sono neutri e non siamo in refinement,
+    omettiamo l'obiettivo completamente: il solver trova una soluzione
+    ammissibile basata sui soli vincoli hard. Questo è il Run B corretto
+    nel confronto LLM vs neutro — scheduling puro senza soft constraint.
+    """
+    return any(
+        w.preferred_shifts or w.avoid_shifts or w.night_tolerance != 0.5
+        for w in workers
+    )
+
+
 def _add_preference_objective(
-    model: cp_model.CpModel,
-    x: dict,
-    workers: List[Worker],
-    days: List[date],
-    draft: ModelDraft,
-    least_satisfied_id: Optional[str] = None,
-    boost_factor: int = 3,
+        model: cp_model.CpModel,
+        x: dict,
+        workers: List[Worker],
+        days: List[date],
+        draft: ModelDraft,
+        least_satisfied_id: Optional[str] = None,
+        boost_factor: int = 3,
 ) -> None:
     """
-    Aggiunge l'obiettivo di massimizzazione della soddisfazione pesata.
-
-    In fase di refinement, il lavoratore target riceve peso amplificato
-    per spingere il solver a privilegiarlo nell'allocazione.
-    I float sono scalati x100 perché OR-Tools lavora con interi.
+    Aggiunge l'obiettivo di massimizzazione della soddisfazione.
+    In Refinement (Stage 4), passa da un approccio utilitaristico (somma)
+    a un approccio Maximin puro (Epsilon-Constraint) focalizzato sul target.
     """
-    shift_types = draft.shift_names
-    objective_terms = []
+    if not _has_real_preferences(workers) and least_satisfied_id is None:
+        return  # Baseline pura senza soft constraint
 
+    shift_types = draft.shift_names
+
+    # ── SCENARIO A: REFINEMENT MAXIMIN DI UN LAVORATORE TARGET ──────────────────
+    if least_satisfied_id is not None:
+        target_terms = []
+        for day in days:
+            for s in shift_types:
+                score_int = int(pref_score(next(w for w in workers if w.worker_id == least_satisfied_id), day, s) * 100)
+                if score_int != 0:
+                    target_terms.append(score_int * x[(least_satisfied_id, day, s)])
+
+        # Massimizziamo UNICAMENTE la soddisfazione del lavoratore più svantaggiato
+        if target_terms:
+            model.maximize(sum(target_terms))
+        return
+
+    # ── SCENARIO B: OTTIMIZZAZIONE GLOBALE INIZIALE (STAGE 2) ───────────────────
+    objective_terms = []
     for worker in workers:
-        weight = boost_factor if worker.worker_id == least_satisfied_id else 1
         for day in days:
             for s in shift_types:
                 score_int = int(pref_score(worker, day, s) * 100)
                 if score_int != 0:
-                    objective_terms.append(
-                        score_int * weight * x[(worker.worker_id, day, s)]
-                    )
+                    objective_terms.append(score_int * x[(worker.worker_id, day, s)])
 
     if objective_terms:
         model.maximize(sum(objective_terms))

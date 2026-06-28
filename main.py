@@ -1,25 +1,22 @@
 """
 main.py
 
-Entry point di SmartScheduler.
+Entry point CLI di SmartScheduler.
 
-Flusso completo:
-    0. Controllo LLM — verifica che Ollama + LLaMA siano disponibili
-       (obbligatorio a meno che non sia specificato --fallback)
-    1. Legge il model draft istituzionale (file .txt)
-    2. Legge le preferenze dei lavoratori (file .json)
-    3. Stage 1 — Preference Agent: NL → Worker objects (via LLM o rule-based)
-    4. Stage 2 — Drafting Agent: OR-Tools solve (+ export modello parziale)
-    5. Stage 3 — Verification Agent: verifica hard + fairness
-       → se fallisce: retry al Drafting Agent con feedback (max MAX_DRAFT_RETRIES)
-    6. Stage 4 — Refinement Agent: loop Maximin
-    7. Output: stampa a schermo + CSV
+Flusso:
+    1. Legge model draft (.txt) e workers (.json)
+    2. Stage 1: estrae preferenze via LLM e le salva in preferences.json
+       (se preferences.json esiste già, lo riusa senza chiamare l'LLM)
+    3. Stage 2: drafting OR-Tools CP-SAT
+    4. Stage 3: verifica hard constraints + fairness
+    5. Stage 4: refinement Maximin
+    6. Output: stampa + CSV
 
 Uso:
-    python main.py --use-case A               # richiede Ollama + llama3
-    python main.py --use-case A --fallback    # rule-based parser (no LLM)
+    python main.py --use-case A
     python main.py --use-case B
-    python main.py --draft input/model_draft_use_case_a.txt --workers input/workers_use_case_a.json
+    python main.py --use-case A --reextract   # forza ri-estrazione via LLM
+    python main.py --use-case A --fallback    # preferenze neutre (baseline)
 """
 
 import argparse
@@ -30,7 +27,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from input.model_draft_parser import parse_model_draft
-from agents.preference_agent import load_and_extract, check_llm_availability
+from agents.preference_agent import extract_and_save, load_preferences
 from agents.drafting_agent import solve
 from agents.verification_agent import verify, evaluate_fairness
 from agents.refinement_agent import refine
@@ -44,65 +41,19 @@ logging.basicConfig(
 logger = logging.getLogger("main")
 
 MAX_DRAFT_RETRIES = 3
-
-
-def _check_llm_or_exit(force_fallback: bool) -> None:
-    """
-    Verifica la disponibilità di Ollama e del modello LLaMA prima
-    di avviare il sistema.
-
-    Se force_fallback è True, il controllo viene saltato e viene
-    stampato un avviso che informa l'utente che le preferenze
-    saranno estratte senza LLM.
-
-    Se force_fallback è False e il modello non è disponibile, il
-    programma termina con un messaggio d'errore chiaro che indica
-    come risolvere il problema (ollama serve + ollama pull llama3).
-
-    Scelta progettuale: il controllo è fatto PRIMA di qualsiasi
-    lettura di file o elaborazione, in modo che l'utente riceva il
-    feedback immediatamente senza attendere l'esecuzione degli stage.
-    """
-    if force_fallback:
-        logger.warning(
-            "Modalità --fallback attiva: le preferenze saranno estratte "
-            "tramite rule-based parser (senza LLM). "
-            "Il sistema non è in modalità IA completa."
-        )
-        return
-
-    logger.info("Verifica disponibilità LLM (Ollama + llama3)...")
-    available, message = check_llm_availability()
-
-    if available:
-        logger.info(f"LLM disponibile: {message}")
-    else:
-        logger.error(
-            f"LLM non disponibile: {message}\n"
-            "\n"
-            "Per avviare il sistema in modalità IA completa:\n"
-            "  1. Avviare Ollama:          ollama serve\n"
-            "  2. Scaricare il modello:    ollama pull llama3\n"
-            "  3. Riprovare:               python main.py --use-case A\n"
-            "\n"
-            "Per avviare senza LLM (rule-based parser):\n"
-            "  python main.py --use-case A --fallback"
-        )
-        sys.exit(1)
+PREFERENCES_PATH  = "output/preferences.json"
 
 
 def run(
     draft_file: str,
     workers_file: str,
     force_fallback: bool = False,
+    force_reextract: bool = False,
 ) -> None:
 
     os.makedirs("output", exist_ok=True)
 
-    # ── Stage 0: Controllo LLM ─────────────────────────────────────────────────
-    _check_llm_or_exit(force_fallback)
-
-    # ── Lettura input istituzionale ────────────────────────────────────────────
+    # ── Lettura draft istituzionale ────────────────────────────────────────────
     logger.info(f"Lettura model draft: {draft_file}")
     draft = parse_model_draft(draft_file)
     logger.info(
@@ -111,24 +62,35 @@ def run(
         f"Orizzonte: {draft.start_date} → {draft.end_date}"
     )
 
-    # ── Stage 1: Preference Agent ──────────────────────────────────────────────
-    logger.info("=== Stage 1: Raccolta e formalizzazione preferenze ===")
-    workers, _ = load_and_extract(workers_file, force_fallback=force_fallback)
-    logger.info(f"Preferenze estratte per {len(workers)} lavoratori.")
+    # ── Stage 1: preferenze ────────────────────────────────────────────────────
+    # Se preferences.json esiste e non si forza la ri-estrazione, lo riusiamo.
+    # Questo evita di chiamare LLaMA inutilmente nelle run successive.
+    if os.path.exists(PREFERENCES_PATH) and not force_reextract and not force_fallback:
+        logger.info(
+            f"=== Stage 1: Carico preferenze da {PREFERENCES_PATH} "
+            f"(usa --reextract per riestrarre via LLM) ==="
+        )
+        workers = load_preferences(PREFERENCES_PATH)
+    else:
+        logger.info("=== Stage 1: Estrazione preferenze via LLM ===")
+        workers = extract_and_save(
+            workers_file=workers_file,
+            preferences_path=PREFERENCES_PATH,
+            force_fallback=force_fallback,
+        )
+
     for w in workers:
         logger.info(
             f"  {w.worker_id} ({w.role}): prefer={w.preferred_shifts}, "
-            f"avoid={w.avoid_shifts}, night_tol={w.night_tolerance:.1f}, "
-            f"days_off={w.preferred_days_off}"
+            f"avoid={w.avoid_shifts}, night_tol={w.night_tolerance:.1f}"
         )
 
-    # ── Stage 2 + 3: Drafting → Verification loop ─────────────────────────────
+    # ── Stage 2 + 3: Drafting → Verification con retry ────────────────────────
     schedule = None
     violation_feedback = None
 
     for attempt in range(1, MAX_DRAFT_RETRIES + 1):
         logger.info(f"=== Stage 2: Drafting (tentativo {attempt}/{MAX_DRAFT_RETRIES}) ===")
-
         model_export = "output/cp_model_partial.txt" if attempt == 1 else None
 
         schedule = solve(
@@ -137,7 +99,6 @@ def run(
             violation_feedback=violation_feedback,
             model_export_path=model_export,
         )
-
         if schedule is None:
             logger.error("Drafting Agent non ha trovato soluzioni. Uscita.")
             sys.exit(1)
@@ -146,31 +107,26 @@ def run(
         is_valid, violations = verify(schedule, draft)
 
         if is_valid:
-            logger.info("Schedule valido — tutti i vincoli hard soddisfatti.")
+            logger.info("Schedule valido.")
             break
         else:
-            logger.warning(
-                f"Schedule non valido: {len(violations)} violazioni. "
-                f"{'Retry.' if attempt < MAX_DRAFT_RETRIES else 'Tentativi esauriti.'}"
-            )
+            logger.warning(f"{len(violations)} violazioni rilevate.")
             for v in violations[:5]:
                 logger.warning(f"  • {v}")
             violation_feedback = violations
             schedule = None
 
     if schedule is None:
-        logger.error(
-            f"Impossibile generare uno schedule valido dopo {MAX_DRAFT_RETRIES} tentativi."
-        )
+        logger.error(f"Impossibile generare uno schedule valido dopo {MAX_DRAFT_RETRIES} tentativi.")
         sys.exit(1)
 
     evaluate_fairness(schedule)
     logger.info(
-        f"Soddisfazione iniziale: min={schedule.min_satisfaction():.3f}, "
+        f"Soddisfazione: min={schedule.min_satisfaction():.3f}, "
         f"worker penalizzato: {schedule.least_satisfied_worker()}"
     )
 
-    # ── Stage 4: Refinement Agent ──────────────────────────────────────────────
+    # ── Stage 4: Refinement ────────────────────────────────────────────────────
     logger.info("=== Stage 4: Refinement Maximin ===")
     final_schedule = refine(schedule, draft)
 
@@ -179,26 +135,30 @@ def run(
     csv_path = f"output/schedule_use_case_{draft.use_case}.csv"
     export_to_csv(final_schedule, csv_path)
     logger.info(f"Schedule salvato in: {csv_path}")
-    logger.info("Modello CP-SAT parziale salvato in: output/cp_model_partial.txt")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SmartScheduler")
     parser.add_argument("--use-case", choices=["A", "B"], default="A")
-    parser.add_argument("--draft", default=None, help="Percorso al model draft .txt")
-    parser.add_argument("--workers", default=None, help="Percorso al file workers .json")
+    parser.add_argument("--draft",   default=None)
+    parser.add_argument("--workers", default=None)
     parser.add_argument(
-        "--fallback",
-        action="store_true",
-        help=(
-            "Usa rule-based parser invece di LLaMA per estrarre le preferenze. "
-            "Non richiede Ollama. Le preferenze vengono estratte tramite keyword matching."
-        ),
+        "--fallback", action="store_true",
+        help="Usa preferenze neutre invece di LLaMA (baseline senza LLM)"
+    )
+    parser.add_argument(
+        "--reextract", action="store_true",
+        help="Forza ri-estrazione via LLM anche se preferences.json esiste"
     )
     args = parser.parse_args()
 
-    uc = args.use_case.upper()
+    uc           = args.use_case.upper()
     draft_file   = args.draft   or f"input/model_draft_use_case_{uc.lower()}.txt"
     workers_file = args.workers or f"input/workers_use_case_{uc.lower()}.json"
 
-    run(draft_file=draft_file, workers_file=workers_file, force_fallback=args.fallback)
+    run(
+        draft_file=draft_file,
+        workers_file=workers_file,
+        force_fallback=args.fallback,
+        force_reextract=args.reextract,
+    )
