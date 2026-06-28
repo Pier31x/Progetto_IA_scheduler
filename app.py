@@ -29,10 +29,23 @@ sys.path.insert(0, ROOT)
 st.set_page_config(page_title="SmartScheduler", page_icon="🏥", layout="wide")
 
 SHIFT_COLORS = {
-    "morning":   {"bg": "#FFF3CD", "border": "#F0A500", "label": "🌅 MAT"},
-    "afternoon": {"bg": "#D1ECF1", "border": "#17A2B8", "label": "🌤 POM"},
-    "night":     {"bg": "#E2D9F3", "border": "#6F42C1", "label": "🌙 NOT"},
+    "morning": {
+        "label": "Mattina",
+        "bg": "#1E3A8A",      # Blu Notte Intenso (Ottimo contrasto, professionale)
+        "border": "#3B82F6",  # Blu Neon per il bordo sinistro
+    },
+    "afternoon": {
+        "label": "Pomeriggio",
+        "bg": "#B45309",    # Ambra/Arancione Bruciato (Caldo ma non accecante)
+        "border": "#F59E0B", # Giallo Oro per il bordo sinistro
+    },
+    "night": {
+        "label": "Notte",
+        "bg": "#4C1D95",      # Viola Scuro Profondo (Rappresenta il turno notturno)
+        "border": "#8B5CF6",  # Viola Fluido per il bordo sinistro
+    }
 }
+
 
 
 # ── Log handler ───────────────────────────────────────────────────────────────
@@ -104,66 +117,118 @@ def load_prefs_summary() -> list:
 
 # ── Calendario HTML ───────────────────────────────────────────────────────────
 
-def render_calendar(schedule) -> str:
-    from config.scenario import SCHEDULE_START, SCHEDULE_END
-    days = all_days(SCHEDULE_START, SCHEDULE_END)
-
-    day_data: dict[date, dict[str, list[str]]] = {}
-    for (wid, day, shift), assigned in schedule.assignments.items():
-        if assigned:
-            day_data.setdefault(day, {}).setdefault(shift, []).append(wid)
-
-    first_monday = days[0] - timedelta(days=days[0].weekday())
-    last_sunday  = days[-1] + timedelta(days=(6 - days[-1].weekday()))
-    weeks = []
-    cur = first_monday
-    while cur <= last_sunday:
-        weeks.append([cur + timedelta(days=i) for i in range(7)])
-        cur += timedelta(weeks=1)
-
-    css = """<style>
-    .cal-wrap{font-family:Arial,sans-serif;overflow-x:auto}
-    .cal-table{border-collapse:collapse;width:100%;table-layout:fixed}
-    .cal-table th{background:#1A3A6B;color:white;text-align:center;padding:8px 4px;font-size:13px;border:1px solid #ddd}
-    .cal-cell{vertical-align:top;border:1px solid #ddd;padding:4px;min-height:90px;background:#fff}
-    .cal-cell.out{background:#f9f9f9}
-    .cal-day-num{font-size:12px;font-weight:bold;color:#555;margin-bottom:4px;text-align:right}
-    .shift-block{border-radius:4px;padding:3px 5px;margin-bottom:3px;font-size:10px;border-left:3px solid;line-height:1.4}
-    .shift-label{font-weight:bold;margin-bottom:2px}
-    </style>"""
-
-    rows = ""
-    for week in weeks:
-        rows += "<tr>"
-        for day in week:
-            in_range = SCHEDULE_START <= day <= SCHEDULE_END
-            rows += f'<td class="cal-cell{" out" if not in_range else ""}">'
-            rows += f'<div class="cal-day-num">{day.day}</div>'
-            if in_range and day in day_data:
-                for st_type in ["morning", "afternoon", "night"]:
-                    wlist = day_data[day].get(st_type, [])
-                    if wlist:
-                        c = SHIFT_COLORS[st_type]
-                        rows += (
-                            f'<div class="shift-block" style="background:{c["bg"]};border-color:{c["border"]}">'
-                            f'<div class="shift-label">{c["label"]}</div>'
-                            f'<div>{", ".join(wlist)}</div></div>'
-                        )
-            rows += "</td>"
-        rows += "</tr>"
-
-    header = "".join(f"<th>{d}</th>" for d in ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"])
-    return f'{css}<div class="cal-wrap"><table class="cal-table"><thead><tr>{header}</tr></thead><tbody>{rows}</tbody></table></div>'
-
-
 def render_legend() -> str:
+    """Genera la legenda dei turni compatibile sia con il tema chiaro che scuro."""
+    # Definiamo colori ad alto contrasto con bordi netti per il tema scuro
     items = "".join(
         f'<span style="display:inline-flex;align-items:center;gap:6px;background:{c["bg"]};'
         f'border-left:4px solid {c["border"]};border-radius:4px;padding:4px 10px;'
-        f'font-size:13px;font-family:Arial;margin-right:10px">{c["label"]}</span>'
+        f'font-size:13px;font-family:Arial;margin-right:10px;color:#FFFFFF;'  # Forza testo bianco per contrasto sul colore
+        f'text-shadow: 1px 1px 1px rgba(0,0,0,0.8); font-weight:bold;">{c["label"]}</span>'
         for c in SHIFT_COLORS.values()
     )
     return f'<div style="margin-bottom:12px">{items}</div>'
+
+
+def render_calendar(schedule) -> str:
+    """
+    Renderizza il calendario mantenendo lo stile e la struttura originale del progetto,
+    ma applicando la nuova palette di colori intensi e ad alto contrasto.
+    """
+    from config.scenario import SCHEDULE_START, SCHEDULE_END
+
+    days = all_days(SCHEDULE_START, SCHEDULE_END)
+
+    html = """
+    <style>
+        .sched-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            color: var(--text-color, #FFFFFF);
+            background-color: transparent;
+        }
+        .sched-table th {
+            background-color: rgba(128, 128, 128, 0.12);
+            color: #4EA3E6; /* Azzurro coordinato per i giorni della settimana */
+            padding: 10px;
+            text-align: center;
+            border: 1px solid rgba(128, 128, 128, 0.2);
+            font-weight: bold;
+            font-size: 13px;
+        }
+        .sched-table td {
+            padding: 6px;
+            text-align: left;
+            border: 1px solid rgba(128, 128, 128, 0.2);
+            vertical-align: top;
+            height: 100px;
+            width: 14.28%;
+            background-color: rgba(128, 128, 128, 0.02);
+        }
+        .day-header {
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            color: var(--text-color, #FFFFFF);
+            opacity: 0.9;
+        }
+        /* Stile per i singoli badge dei turni */
+        .shift-item {
+            border-radius: 4px; 
+            padding: 4px 8px; 
+            margin: 4px 0; 
+            font-size: 11px;
+            font-weight: 600; 
+            color: #FFFFFF !important; /* Forza testo bianco nitido */
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8); /* Massima leggibilità su sfondi intensi */
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+        }
+    </style>
+    <table class="sched-table">
+        <tr>
+            <th>Lun</th><th>Mar</th><th>Mer</th><th>Gio</th><th>Ven</th><th>Sab</th><th>Dom</th>
+        </tr>
+        <tr>
+    """
+
+    # Allineamento dinamico del primo giorno del mese
+    start_idx = days.weekday() if hasattr(days, 'weekday') else days[0].weekday()
+    for _ in range(start_idx):
+        html += "<td></td>"
+
+    current_idx = start_idx
+
+    # Ciclo di popolazione delle celle con i dati dello schedule
+    for day in days:
+        if current_idx == 7:
+            html += "</tr><tr>"
+            current_idx = 0
+
+        html += "<td>"
+        html += f'<div class="day-header">{day.day}</div>'
+
+        for s in ["morning", "afternoon", "night"]:
+            assigned = schedule.get_shift_workers(day, s)
+            if assigned:
+                workers_str = ", ".join(assigned)
+                c = SHIFT_COLORS[s]
+
+                # Applichiamo lo stile originale arricchito con le nuove classi di contrasto
+                html += (
+                    f'<div class="shift-item" style="background:{c["bg"]}; border-left:4px solid {c["border"]};">'
+                    f'<strong>{c["label"]}:</strong> {workers_str}'
+                    f'</div>'
+                )
+        html += "</td>"
+        current_idx += 1
+
+    while current_idx < 7:
+        html += "<td></td>"
+        current_idx += 1
+
+    html += "</tr></table>"
+    return html
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
@@ -209,8 +274,8 @@ def main():
             st.warning("⚠️ preferences.json assente\nEsegui Stage 1 prima.")
         st.caption("Output salvato in `output/`")
 
-    tabs = st.tabs(["📄 Input", "🤖 Stage 1 — Preferenze", "📅 Scheduling", "⚖️ Confronto", "📊 Risultati"])
-    tab_input, tab_stage1, tab_scheduling, tab_compare, tab_results = tabs
+    tabs = st.tabs(["📄 Input", "🤖 Stage 1 — Preferenze", "📅 Scheduling", "📊 Risultati", "⚖️ Confronto"])
+    tab_input, tab_stage1, tab_scheduling, tab_results, tab_compare = tabs
 
     # ── TAB INPUT ─────────────────────────────────────────────────────────────
     with tab_input:

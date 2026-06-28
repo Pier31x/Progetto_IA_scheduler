@@ -4,12 +4,12 @@
     {
       "worker_id": "W01",
       "role": "standard",
-      "statement": "Preferisco i turni notturni e vorrei avere la domenica libera. I turni mattutini non mi piacciono per niente."
+      "statement": "A me piace giocare a calcio"
     },
     {
       "worker_id": "W02",
       "role": "standard",
-      "statement": "Sono disponibile per qualsiasi turno. Apprezzerei almeno un sabato libero al mese."
+      "statement": "Io lunedì ho il calcetto"
     },
     {
       "worker_id": "W03",
@@ -44,7 +44,7 @@
     {
       "worker_id": "W09",
       "role": "standard",
-      "statement": "I turni notturni vanno bene per me. In realtà li preferisco."
+      "statement": "Ogni domenica mangio la pasta"
     },
     {
       "worker_id": "W10",
