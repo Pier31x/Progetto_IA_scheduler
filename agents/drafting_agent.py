@@ -65,36 +65,92 @@ def _add_preference_objective(
 ) -> None:
     """
     Aggiunge l'obiettivo di massimizzazione della soddisfazione.
-    In Refinement (Stage 4), passa da un approccio utilitaristico (somma)
-    a un approccio Maximin puro (Epsilon-Constraint) focalizzato sul target.
+
+    Modalità Stage 2 (least_satisfied_id is None):
+        Ottimizzazione globale — l'obiettivo è la somma pesata dei
+        pref_score di tutti i lavoratori.
+
+        Formulazione: maximize Σ_{w,d,s} pref_score(w,d,s) * x[w,d,s]
+
+    Modalità Stage 4 — Refinement Maximin (least_satisfied_id is not None):
+        L'obiettivo include tutti i lavoratori, ma i termini del lavoratore
+        target vengono moltiplicati per boost_factor. Questo spinge il solver
+        a migliorare il lavoratore meno soddisfatto senza ignorare gli altri,
+        in linea con la traccia: "by considering the preferences and associated
+        priorities declared by all workers".
+
+        Formulazione:
+            maximize Σ_{w≠target, d, s} pref_score(w,d,s) * x[w,d,s]
+                   + Σ_{d, s} boost_factor * pref_score(target,d,s) * x[target,d,s]
+
+        Perché non massimizzare solo il target (come nella versione precedente):
+        Massimizzare unicamente il target porta il solver a trovare schedule
+        che massimizzano la soddisfazione di un solo lavoratore spesso a
+        scapito degli altri, perché tutti gli altri termini hanno peso zero
+        e il solver è libero di ignorarli. Con il boost, il target ha
+        priorità ma gli altri lavoratori rimangono nell'obiettivo con
+        peso 1, così il solver cerca un equilibrio.
+
+        CORREZIONE rispetto alla versione precedente:
+        La vecchia implementazione riceveva boost_factor ma non lo usava mai
+        (parametro dead). Inoltre massimizzava solo il target, escludendo
+        dal calcolo le preferenze di tutti gli altri lavoratori.
     """
     if not _has_real_preferences(workers) and least_satisfied_id is None:
         return  # Baseline pura senza soft constraint
 
     shift_types = draft.shift_names
 
-    # ── SCENARIO A: REFINEMENT MAXIMIN DI UN LAVORATORE TARGET ──────────────────
+    # ── SCENARIO A: REFINEMENT MAXIMIN (STAGE 4) ──────────────────────────────
     if least_satisfied_id is not None:
-        target_terms = []
-        for day in days:
-            for s in shift_types:
-                score_int = int(pref_score(next(w for w in workers if w.worker_id == least_satisfied_id), day, s) * 100)
-                if score_int != 0:
-                    target_terms.append(score_int * x[(least_satisfied_id, day, s)])
+        # Pre-fetch del lavoratore target per evitare una ricerca O(n)
+        # ad ogni iterazione del doppio loop (days × shifts).
+        # La versione precedente eseguiva next(w for w in workers ...) dentro
+        # il loop, risultando in O(n * |days| * |shifts|) ricerche totali.
+        target_worker = next(
+            (w for w in workers if w.worker_id == least_satisfied_id), None
+        )
+        if target_worker is None:
+            logger.warning(
+                f"[Refinement] Worker target '{least_satisfied_id}' non trovato. "
+                "Fallback su obiettivo globale senza boost."
+            )
+            least_satisfied_id = None  # ricade nello Scenario B
 
-        # Massimizziamo UNICAMENTE la soddisfazione del lavoratore più svantaggiato
-        if target_terms:
-            model.maximize(sum(target_terms))
-        return
+        else:
+            objective_terms = []
+            for worker in workers:
+                # Il peso di ogni lavoratore nell'obiettivo:
+                #   - boost_factor per il target (lavoratore meno soddisfatto)
+                #   - 1 per tutti gli altri (rimangono nell'obiettivo)
+                weight = boost_factor if worker.worker_id == least_satisfied_id else 1
 
-    # ── SCENARIO B: OTTIMIZZAZIONE GLOBALE INIZIALE (STAGE 2) ───────────────────
+                for day in days:
+                    for s in shift_types:
+                        # pref_score ∈ [-1.0, +1.0]; moltiplichiamo per 100
+                        # per lavorare con interi (CP-SAT richiede coefficienti interi).
+                        score_int = int(pref_score(worker, day, s) * 100)
+                        if score_int != 0:
+                            objective_terms.append(
+                                weight * score_int * x[(worker.worker_id, day, s)]
+                            )
+
+            if objective_terms:
+                model.maximize(sum(objective_terms))
+            return
+
+    # ── SCENARIO B: OTTIMIZZAZIONE GLOBALE INIZIALE (STAGE 2) ─────────────────
+    # Se least_satisfied_id era None dall'inizio, o è stato azzerato
+    # per target non trovato, eseguiamo l'ottimizzazione globale standard.
     objective_terms = []
     for worker in workers:
         for day in days:
             for s in shift_types:
                 score_int = int(pref_score(worker, day, s) * 100)
                 if score_int != 0:
-                    objective_terms.append(score_int * x[(worker.worker_id, day, s)])
+                    objective_terms.append(
+                        score_int * x[(worker.worker_id, day, s)]
+                    )
 
     if objective_terms:
         model.maximize(sum(objective_terms))
@@ -115,7 +171,9 @@ def solve(
         workers: lavoratori con preferenze formalizzate
         draft: model draft istituzionale
         least_satisfied_id: in refinement, ID del lavoratore target
-        boost_factor: peso amplificato per il lavoratore target
+        boost_factor: peso amplificato per il lavoratore target.
+            Con boost_factor=5 (usato dal Refinement Agent), i termini
+            del target pesano 5x rispetto agli altri nell'obiettivo.
         violation_feedback: lista di violazioni dal Verification Agent
             (loggate per debugging; in un sistema LLM full verrebbero
             incluse nel prompt di retry al modello)
