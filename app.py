@@ -80,19 +80,26 @@ def all_days(start, end):
         d += timedelta(days=1)
     return days
 
-def prefs_path():
-    return os.path.join(ROOT, "output", "preferences.json")
+def prefs_path() -> str:
+    """Restituisce il percorso del JSON delle preferenze specifico per lo Use Case corrente."""
+    uc = st.session_state.get("use_case", "A").lower()
+    return os.path.join(ROOT, "output", f"preferences_use_case_{uc}.json")
 
-def has_preferences():
+def has_preferences() -> bool:
+    """Verifica se esiste il file delle preferenze per lo Use Case corrente."""
     return os.path.exists(prefs_path())
 
-def load_prefs_summary():
-    """Carica preferences.json e restituisce un sommario leggibile."""
+def load_prefs_summary() -> list:
+    """Carica le preferenze correnti dal file specifico dello Use Case attivo."""
+    import json
     if not has_preferences():
-        return None
+        return []
     with open(prefs_path(), encoding="utf-8") as f:
+        # Se il tuo file è una lista o ha una chiave interna, mantieni il tuo parsing originale.
+        # Di solito: json.load(f) se salvi una lista, o json.load(f)["workers"]
         data = json.load(f)
-    return data
+        return data if isinstance(data, list) else data.get("workers", [])
+
 
 
 # ── Calendario HTML ───────────────────────────────────────────────────────────
@@ -161,22 +168,37 @@ def render_legend() -> str:
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
+# ── UI ────────────────────────────────────────────────────────────────────────
+
 def main():
     st.title("🏥 SmartScheduler")
     st.caption("Fair and Constraint-Aware Hospital Shift Scheduling")
 
+    # 1. SINCRONIZZAZIONE DI SESSIONE: Inizializza o aggiorna lo Use Case globale
+    if "use_case" not in st.session_state:
+        st.session_state["use_case"] = "A"
+
     # Sidebar: solo selezione Use Case
     with st.sidebar:
         st.header("⚙️ Configurazione")
+
+        # Leggiamo direttamente dallo stato o salviamo nello stato al cambio
         use_case = st.radio(
             "Use Case",
             ["A", "B"],
+            index=0 if st.session_state["use_case"] == "A" else 1,
             format_func=lambda x: (
                 "A — 13 lavoratori omogenei" if x == "A"
                 else "B — 13 standard + 7 specializzati"
             ),
+            key="use_case_radio"  # chiave interna per il widget
         )
-        draft_path   = os.path.join(ROOT, "input", f"model_draft_use_case_{use_case.lower()}.txt")
+
+        # Aggiorna lo stato globale per gli altri Tab e gli Agenti di calcolo
+        st.session_state["use_case"] = use_case
+
+        # Generazione dinamica dei percorsi file basati sulla selezione corrente
+        draft_path = os.path.join(ROOT, "input", f"model_draft_use_case_{use_case.lower()}.txt")
         workers_path = os.path.join(ROOT, "input", f"workers_use_case_{use_case.lower()}.json")
 
         st.divider()
@@ -192,23 +214,38 @@ def main():
 
     # ── TAB INPUT ─────────────────────────────────────────────────────────────
     with tab_input:
-        st.subheader("Model Draft Istituzionale")
+        st.subheader(f"Model Draft Istituzionale (Scenario {use_case})")
         st.caption("Turni, forza lavoro e vincoli legali. Salva prima di eseguire.")
-        draft_content = st.text_area("model_draft.txt", value=load_file(draft_path), height=260, key="draft_ed")
-        if st.button("💾 Salva model draft"):
+
+        # FIX CRITICO: Il parametro key cambia dinamicamente includendo il nome dello use_case.
+        # Questo costringe Streamlit a distruggere e ricreare il componente leggendo il nuovo file.
+        draft_content = st.text_area(
+            f"model_draft_use_case_{use_case.lower()}.txt",
+            value=load_file(draft_path),
+            height=260,
+            key=f"draft_ed_{use_case.lower()}"  # <--- Chiave dinamica basata sullo Use Case
+        )
+        if st.button("💾 Salva model draft", key=f"btn_save_draft_{use_case.lower()}"):
             save_file(draft_path, draft_content)
-            st.success("Salvato.")
+            st.success(f"File dello Scenario {use_case} salvato con successo.")
 
         st.divider()
-        st.subheader("Statement Lavoratori")
+        st.subheader(f"Statement Lavoratori (Scenario {use_case})")
         st.caption(
             "Scrivi gli statement liberamente in italiano o inglese. "
             "LLaMA interpreterà il testo e estrarrà le preferenze."
         )
-        workers_content = st.text_area("workers.json", value=load_file(workers_path), height=380, key="workers_ed")
-        if st.button("💾 Salva workers"):
+
+        # FIX CRITICO: Chiave dinamica applicata anche al file JSON degli statement
+        workers_content = st.text_area(
+            f"workers_use_case_{use_case.lower()}.json",
+            value=load_file(workers_path),
+            height=380,
+            key=f"workers_ed_{use_case.lower()}"  # <--- Chiave dinamica basata sullo Use Case
+        )
+        if st.button("💾 Salva workers", key=f"btn_save_workers_{use_case.lower()}"):
             save_file(workers_path, workers_content)
-            st.success("Salvato.")
+            st.success(f"Dati dei lavoratori dello Scenario {use_case} salvati con successo.")
 
     # ── TAB STAGE 1 ───────────────────────────────────────────────────────────
     with tab_stage1:
@@ -246,8 +283,12 @@ def main():
                                    disabled=not has_preferences())
 
         if run_stage1 or rerun_stage1:
+            # Se il file dello Use Case ATTIVO esiste già e l'utente ha premuto il tasto di prima esecuzione
             if has_preferences() and run_stage1:
-                st.info("preferences.json già presente — nessuna azione. Usa **Riesegui** per aggiornare.")
+                st.info(
+                    f"ℹ️ Le preferenze per lo Scenario {use_case} sono già presenti. "
+                    "Usa il tasto **🔄 Riesegui Stage 1** a destra per sovrascriverle."
+                )
             else:
                 handler = _attach_log_handler()
                 os.chdir(ROOT)
@@ -278,10 +319,11 @@ def main():
                         w = _apply_backend(entry["worker_id"], entry["role"], entry["statement"], backend)
                         workers_out.append(w)
 
+                    # Salva nel percorso dinamico specifico (preferences_use_case_a.json o b.json)
                     save_preferences(workers_out, prefs_path())
                     status.empty()
                     prog.progress(100, text="Stage 1 completato.")
-                    st.success(f"✅ Preferenze estratte per {len(workers_out)} lavoratori e salvate.")
+                    st.success(f"✅ Preferenze estratte per {len(workers_out)} lavoratori dello Scenario {use_case} salvate.")
                     st.rerun()
 
                 except Exception as e:
@@ -292,6 +334,7 @@ def main():
 
                 with st.expander("📋 Log"):
                     st.code(handler.get_log_text(), language=None)
+
 
     # ── TAB SCHEDULING ────────────────────────────────────────────────────────
     with tab_scheduling:

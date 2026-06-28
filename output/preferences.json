@@ -3,15 +3,15 @@
     "worker_id": "W01",
     "role": "standard",
     "preferred_shifts": [
-      "night"
+      "morning"
     ],
     "avoid_shifts": [
-      "morning"
+      "night"
     ],
     "preferred_days_off": [
       "sunday"
     ],
-    "night_tolerance": 1.0,
+    "night_tolerance": 0.0,
     "holiday_tolerance": 0.5,
     "emergency_availability": 0
   },
@@ -182,6 +182,102 @@
       "wednesday",
       "thursday",
       "friday"
+    ],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "S01",
+    "role": "specialized",
+    "preferred_shifts": [
+      "morning"
+    ],
+    "avoid_shifts": [],
+    "preferred_days_off": [],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "S02",
+    "role": "specialized",
+    "preferred_shifts": [
+      "morning",
+      "afternoon"
+    ],
+    "avoid_shifts": [
+      "night"
+    ],
+    "preferred_days_off": [],
+    "night_tolerance": 0.0,
+    "holiday_tolerance": 1.0,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "S03",
+    "role": "specialized",
+    "preferred_shifts": [
+      "morning",
+      "afternoon"
+    ],
+    "avoid_shifts": [],
+    "preferred_days_off": [
+      "saturday",
+      "sunday"
+    ],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "S04",
+    "role": "specialized",
+    "preferred_shifts": [
+      "afternoon"
+    ],
+    "avoid_shifts": [
+      "night"
+    ],
+    "preferred_days_off": [],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 1.0,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "S05",
+    "role": "specialized",
+    "preferred_shifts": [],
+    "avoid_shifts": [],
+    "preferred_days_off": [],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "S06",
+    "role": "specialized",
+    "preferred_shifts": [
+      "morning"
+    ],
+    "avoid_shifts": [
+      "night"
+    ],
+    "preferred_days_off": [],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "S07",
+    "role": "specialized",
+    "preferred_shifts": [
+      "morning",
+      "afternoon"
+    ],
+    "avoid_shifts": [],
+    "preferred_days_off": [
+      "sunday"
     ],
     "night_tolerance": 0.5,
     "holiday_tolerance": 0.5,

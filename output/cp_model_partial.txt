@@ -5,8 +5,8 @@ SMARTSCHEDULER — OR-Tools CP-SAT Model (Partial)
 [DECISION VARIABLES]
   Type: BoolVar  (0 = not assigned, 1 = assigned)
   Schema: x[worker_id, date, shift_type]
-  Total: 1209 variables
-    Workers  : 13
+  Total: 1860 variables
+    Workers  : 20
     Days     : 31  (2026-12-07 to 2027-01-06)
     Shifts   : ['morning', 'afternoon', 'night']
 
@@ -31,9 +31,12 @@ SMARTSCHEDULER — OR-Tools CP-SAT Model (Partial)
     Weights: {'morning': 1, 'afternoon': 1, 'night': 2}
 
   C6 — Shift coverage:
-    ∀d: Σ_w x[w,d,morning] ≥ 2  (all workers)
-    ∀d: Σ_w x[w,d,afternoon] ≥ 2  (all workers)
-    ∀d: Σ_w x[w,d,night] ≥ 2  (all workers)
+    ∀d: Σ_{w∈standard} x[w,d,morning] ≥ 2
+         Σ_{w∈specialized} x[w,d,morning] ≥ 1
+    ∀d: Σ_{w∈standard} x[w,d,afternoon] ≥ 2
+         Σ_{w∈specialized} x[w,d,afternoon] ≥ 1
+    ∀d: Σ_{w∈standard} x[w,d,night] ≥ 2
+         Σ_{w∈specialized} x[w,d,night] ≥ 1
 
 [OBJECTIVE]
   Maximize: Σ_{w,d,s} pref_score(w,d,s) * x[w,d,s]
@@ -43,6 +46,7 @@ SMARTSCHEDULER — OR-Tools CP-SAT Model (Partial)
 
 [WORKFORCE]
   standard: 13 workers
+  specialized: 7 workers
 
   Workers list:
     W01 (standard): prefer=['morning'], avoid=['night'], night_tol=0.0
@@ -58,5 +62,12 @@ SMARTSCHEDULER — OR-Tools CP-SAT Model (Partial)
     W11 (standard): prefer=[], avoid=[], night_tol=0.5
     W12 (standard): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.5
     W13 (standard): prefer=[], avoid=[], night_tol=0.5
+    S01 (specialized): prefer=['morning'], avoid=[], night_tol=0.5
+    S02 (specialized): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.0
+    S03 (specialized): prefer=['morning', 'afternoon'], avoid=[], night_tol=0.5
+    S04 (specialized): prefer=['afternoon'], avoid=['night'], night_tol=0.5
+    S05 (specialized): prefer=[], avoid=[], night_tol=0.5
+    S06 (specialized): prefer=['morning'], avoid=['night'], night_tol=0.5
+    S07 (specialized): prefer=['morning', 'afternoon'], avoid=[], night_tol=0.5
 
 ======================================================================
