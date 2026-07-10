@@ -5,12 +5,20 @@ Flusso UI:
     Tab Input:     modifica model draft e statements lavoratori
     Tab Stage 1:   estrai preferenze via LLM → salva preferences.json
     Tab Scheduling: carica preferences.json → produce schedule finale
-    Tab Confronto: Con preferenze LLM (preferenze LLM) vs Baseline senza preferenze (neutro) → metriche
+    Tab Confronto: Scenario A (solo vincoli) vs B (vincoli+pref.+OR-Tools)
+                   vs C (vincoli+pref.+LLM), preferenze estratte UNA sola
+                   volta e condivise dai tre scenari → metriche di fairness
+    Tab Demo:      visualizza risultati di Confronto GIA' PRECALCOLATI
+                   (Use Case A o B) in modo istantaneo, senza rieseguire nulla
     Tab Risultati: visualizza l'ultimo schedule prodotto
 
 Il file preferences.json è il punto di disaccoppiamento:
     - Stage 1 lo produce (una volta sola, richiede LLaMA)
     - Scheduling e Confronto lo consumano (veloci, nessuna chiamata LLM)
+
+I risultati del Confronto vengono inoltre salvati su disco (pickle) per
+Use Case, così da poterli richiamare istantaneamente dal tab Demo durante
+una presentazione/esame, senza dover rieseguire l'intera pipeline.
 
 Avvio: streamlit run app.py
 """
@@ -18,10 +26,13 @@ Avvio: streamlit run app.py
 import json
 import logging
 import os
+import pickle
 import sys
 from datetime import date, timedelta
 
 import streamlit as st
+
+from agents.drafting.llm_drafting import LLMDraftingAgent
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
@@ -93,10 +104,14 @@ def all_days(start, end):
         d += timedelta(days=1)
     return days
 
+def prefs_path_for(uc: str) -> str:
+    """Restituisce il percorso del JSON delle preferenze per uno Use Case specifico ('A' o 'B')."""
+    return os.path.join(ROOT, "output", f"preferences_use_case_{uc.lower()}.json")
+
 def prefs_path() -> str:
     """Restituisce il percorso del JSON delle preferenze specifico per lo Use Case corrente."""
-    uc = st.session_state.get("use_case", "A").lower()
-    return os.path.join(ROOT, "output", f"preferences_use_case_{uc}.json")
+    uc = st.session_state.get("use_case", "A")
+    return prefs_path_for(uc)
 
 def has_preferences() -> bool:
     """Verifica se esiste il file delle preferenze per lo Use Case corrente."""
@@ -113,6 +128,25 @@ def load_prefs_summary() -> list:
         data = json.load(f)
         return data if isinstance(data, list) else data.get("workers", [])
 
+
+def comparison_path_for(uc: str) -> str:
+    """Percorso del file pickle con i risultati del Confronto A/B/C precalcolati per uno Use Case."""
+    return os.path.join(ROOT, "output", f"comparison_use_case_{uc.lower()}.pkl")
+
+def has_comparison(uc: str) -> bool:
+    """Verifica se esistono risultati di Confronto già precalcolati e salvati per lo Use Case dato."""
+    return os.path.exists(comparison_path_for(uc))
+
+def save_comparison(uc: str, result) -> None:
+    """Salva su disco i risultati del Confronto A/B/C per poterli richiamare istantaneamente in seguito."""
+    os.makedirs(os.path.join(ROOT, "output"), exist_ok=True)
+    with open(comparison_path_for(uc), "wb") as f:
+        pickle.dump(result, f)
+
+def load_comparison(uc: str):
+    """Carica dal disco i risultati del Confronto A/B/C già precalcolati per lo Use Case dato."""
+    with open(comparison_path_for(uc), "rb") as f:
+        return pickle.load(f)
 
 
 # ── Calendario HTML ───────────────────────────────────────────────────────────
@@ -231,7 +265,123 @@ def render_calendar(schedule) -> str:
     return html
 
 
-# ── UI ────────────────────────────────────────────────────────────────────────
+# ── Rendering condiviso dei risultati del Confronto A/B/C ─────────────────────
+
+def render_comparison_results(result, uc: str, key_prefix: str) -> None:
+    """
+    Renderizza i risultati di un Confronto A/B/C (Sezioni 1-5), sia che provengano
+    da un'esecuzione appena effettuata (tab Confronto), sia che siano stati
+    caricati da un file pickle precalcolato (tab Demo).
+
+    `uc` è lo Use Case a cui appartiene il risultato (serve per i download e per
+    "Invia a Risultati"). `key_prefix` garantisce chiavi univoche ai widget quando
+    la funzione viene richiamata da più tab nella stessa sessione.
+    """
+    import pandas as pd
+    import plotly.express as px
+
+    scenarios = [result.scenario_a, result.scenario_b, result.scenario_c]
+
+    st.divider()
+    st.header("🎯 Risultati del Confronto")
+
+    # SEZIONE 1: metriche chiave affiancate (Soddisfazione ed Emergenze)
+    cols = st.columns(3)
+    for col, sc in zip(cols, scenarios):
+        m = sc.metrics
+        col.markdown(f"### {sc.label}")
+        col.metric("Soddisfazione media", f"{m['avg_satisfaction']:.3f}")
+        col.metric("Soddisfazione minima", f"{m['min_satisfaction']:.3f}")
+        col.metric("Preferenze soddisfatte", f"{m['preference_satisfaction_pct']:.1f}%")
+        col.metric("Allineamento Straordinari", f"{m.get('emergency_alignment', 1.0) * 100:.1f}%")
+
+    # SEZIONE 2: soddisfazione individuale per scenario
+    st.subheader("📊 Confronto Soddisfazione Individuale dei Lavoratori")
+    st.caption(
+        "Le stesse preferenze reali (estratte una sola volta) sono usate "
+        "per misurare la soddisfazione in tutti e tre gli scenari."
+    )
+
+    rows_sat = []
+    for sc in scenarios:
+        scores = sc.schedule.satisfaction_scores
+        for w in result.workers:
+            rows_sat.append({
+                "Lavoratore": w.worker_id,
+                "Scenario": sc.label,
+                "Soddisfazione": scores.get(w.worker_id, 0.0),
+            })
+
+    df_sat = pd.DataFrame(rows_sat)
+    fig_sat = px.bar(
+        df_sat, x="Lavoratore", y="Soddisfazione", color="Scenario",
+        barmode="group",
+    )
+    fig_sat.update_layout(yaxis_range=[0, 1.05])
+    st.plotly_chart(fig_sat, use_container_width=True, key=f"{key_prefix}_fig_sat")
+
+    # SEZIONE 3: Distribuzione dei carichi di lavoro (Tabella Unica)
+    st.subheader("🌙 ed 🏖️ Distribuzione di Notti, Festivi e Straordinari")
+    st.caption("Pannello di controllo comparativo sui turni critici assegnati per ogni lavoratore.")
+
+    rows_distribution = []
+    for w in result.workers:
+        for sc in scenarios:
+            m = sc.metrics
+            rows_distribution.append({
+                "Lavoratore": w.worker_id,
+                "Scenario": sc.label,
+                "Turni Notturni": m["night_distribution"].get(w.worker_id, 0),
+                "Turni Festivi": m.get("holiday_distribution", {}).get(w.worker_id, 0),
+                "Straordinari Assegnati": m.get("overtime_distribution", {}).get(w.worker_id, 0)
+                # Assicurati che esista in _fairness_metrics o adattalo
+            })
+
+    df_dist = pd.DataFrame(rows_distribution)
+    st.dataframe(df_dist, use_container_width=True, hide_index=True, key=f"{key_prefix}_df_dist")
+
+    # SEZIONE 4: Metriche strutturali ed equità assoluta (Semplificata)
+    with st.expander("📈 Bilanciamento ed Equità dei Turni (KPI Semplici)"):
+        rows_extra = []
+        for sc in scenarios:
+            m = sc.metrics
+            rows_extra.append({
+                "Scenario": sc.label,
+                "Min Notti": m["min_nights"],
+                "Max Notti": m["max_nights"],
+                "Divario Notti": m.get("discrepancy_nights", m["max_nights"] - m["min_nights"]),
+                "Min Festivi": m.get("min_holidays", "—"),
+                "Max Festivi": m.get("max_holidays", "—"),
+                "Totale Straordinari": m.get("total_overtime_shifts", "—"),
+                "Worker Meno Soddisfatto": m["least_satisfied_worker"],
+            })
+        st.dataframe(pd.DataFrame(rows_extra), use_container_width=True, hide_index=True,
+                     key=f"{key_prefix}_df_extra")
+
+    # SEZIONE 5: invia uno scenario al tab Risultati
+    st.divider()
+    st.subheader("📤 Visualizza uno scenario nel tab Risultati")
+    label_to_schedule = {sc.label: sc.schedule for sc in scenarios}
+    chosen_label = st.selectbox(
+        "Scegli lo scenario da visualizzare",
+        list(label_to_schedule.keys()),
+        key=f"{key_prefix}_compare_choice",
+    )
+    if st.button("Invia a Risultati", key=f"{key_prefix}_btn_send_to_results"):
+        st.session_state["final_schedule"] = label_to_schedule[chosen_label]
+        st.session_state["use_case"] = uc
+        st.success(f"'{chosen_label}' inviato al tab Risultati.")
+
+    # Download
+    st.divider()
+    pp = prefs_path_for(uc)
+    if os.path.exists(pp):
+        with open(pp, "rb") as f:
+            st.download_button(
+                "⬇️ preferences.json", data=f, file_name="preferences.json",
+                mime="application/json", key=f"{key_prefix}_dl_prefs"
+            )
+
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
@@ -247,48 +397,71 @@ def main():
     with st.sidebar:
         st.header("⚙️ Configurazione")
 
-        # Leggiamo direttamente dallo stato o salviamo nello stato al cambio
+        # ── Use Case ─────────────────────────────────────────────
         use_case = st.radio(
             "Use Case",
             ["A", "B"],
             index=0 if st.session_state["use_case"] == "A" else 1,
             format_func=lambda x: (
-                "A — 13 lavoratori omogenei" if x == "A"
+                "A — 13 lavoratori omogenei"
+                if x == "A"
                 else "B — 13 standard + 7 specializzati"
             ),
-            key="use_case_radio"  # chiave interna per il widget
+            key="use_case_radio"
         )
 
-        # Aggiorna lo stato globale per gli altri Tab e gli Agenti di calcolo
         st.session_state["use_case"] = use_case
 
-        # Generazione dinamica dei percorsi file basati sulla selezione corrente
-        draft_path = os.path.join(ROOT, "input", f"model_draft_use_case_{use_case.lower()}.txt")
-        workers_path = os.path.join(ROOT, "input", f"workers_use_case_{use_case.lower()}.json")
+        # ── Drafting Agent ───────────────────────────────────────
+        drafting_mode = st.radio(
+            "Drafting Agent",
+            ["Solver", "LLM"],
+            index=0,
+            help="Seleziona l'agente utilizzato nello Stage 2.",
+            key="drafting_mode"
+        )
 
         st.divider()
+
+        # Percorsi file
+        draft_path = os.path.join(
+            ROOT,
+            "input",
+            f"model_draft_use_case_{use_case.lower()}.txt"
+        )
+
+        workers_path = os.path.join(
+            ROOT,
+            "input",
+            f"workers_use_case_{use_case.lower()}.json"
+        )
+
         # Stato preferences.json
         if has_preferences():
             st.success("✅ preferences.json presente")
         else:
             st.warning("⚠️ preferences.json assente\nEsegui Stage 1 prima.")
-        st.caption("Output salvato in `output/`")
 
-    tabs = st.tabs(["📄 Input", "🤖 Stage 1 — Preferenze", "📅 Scheduling", "📊 Risultati", "⚖️ Confronto"])
-    tab_input, tab_stage1, tab_scheduling, tab_results, tab_compare = tabs
+        # st.caption("Output salvato in `output/`")
+
+    tabs = st.tabs([
+        "📄 Input", "🤖 Preferenze", "📅 Scheduling", "📊 Risultati",
+        "⚖️ Confronto", "🖥️ Demo",
+    ])
+    tab_input, tab_stage1, tab_scheduling, tab_results, tab_compare, tab_demo = tabs
 
     # ── TAB INPUT ─────────────────────────────────────────────────────────────
     with tab_input:
         st.subheader(f"Model Draft Istituzionale (Scenario {use_case})")
         st.caption("Turni, forza lavoro e vincoli legali. Salva prima di eseguire.")
 
-        # FIX CRITICO: Il parametro key cambia dinamicamente includendo il nome dello use_case.
+        # Il parametro key cambia dinamicamente includendo il nome dello use_case.
         # Questo costringe Streamlit a distruggere e ricreare il componente leggendo il nuovo file.
         draft_content = st.text_area(
             f"model_draft_use_case_{use_case.lower()}.txt",
             value=load_file(draft_path),
             height=260,
-            key=f"draft_ed_{use_case.lower()}"  # <--- Chiave dinamica basata sullo Use Case
+            key=f"draft_ed_{use_case.lower()}"
         )
         if st.button("💾 Salva model draft", key=f"btn_save_draft_{use_case.lower()}"):
             save_file(draft_path, draft_content)
@@ -301,24 +474,25 @@ def main():
             "LLaMA interpreterà il testo e estrarrà le preferenze."
         )
 
-        # FIX CRITICO: Chiave dinamica applicata anche al file JSON degli statement
+        # Chiave dinamica applicata anche al file JSON degli statement
         workers_content = st.text_area(
             f"workers_use_case_{use_case.lower()}.json",
             value=load_file(workers_path),
             height=380,
-            key=f"workers_ed_{use_case.lower()}"  # <--- Chiave dinamica basata sullo Use Case
+            key=f"workers_ed_{use_case.lower()}"
         )
         if st.button("💾 Salva workers", key=f"btn_save_workers_{use_case.lower()}"):
             save_file(workers_path, workers_content)
             st.success(f"Dati dei lavoratori dello Scenario {use_case} salvati con successo.")
 
-    # ── TAB STAGE 1 ───────────────────────────────────────────────────────────
+    # ── TAB STAGE 1 (estrazione preferenze) ───────────────────────────────────────────────────────────
     with tab_stage1:
-        st.subheader("🤖 Stage 1 — Estrazione Preferenze via LLM")
+        st.subheader("🤖 Estrazione Preferenze via LLM")
         st.markdown(
             "Legge gli statement dal file workers e chiama **LLaMA** per formalizzare "
             "le preferenze di ogni lavoratore. Il risultato viene salvato in "
             "`output/preferences.json` e riutilizzato da tutti gli stadi successivi "
+            "(incluso il tab Confronto, che lo estrae una sola volta) "
             "senza chiamare l'LLM di nuovo."
         )
 
@@ -339,6 +513,8 @@ def main():
                     "Evita": ", ".join(w.get("avoid_shifts", [])) or "—",
                     "Giorni off": ", ".join(w.get("preferred_days_off", [])) or "—",
                     "Night tol.": w.get("night_tolerance", 0.5),
+                    "Holiday tol.": w.get("holiday_tolerance", 0.5),
+                    "Emergency Availability": w.get("emergency_availability", 0)
                 })
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
@@ -400,13 +576,15 @@ def main():
                 with st.expander("📋 Log"):
                     st.code(handler.get_log_text(), language=None)
 
-
     # ── TAB SCHEDULING ────────────────────────────────────────────────────────
     with tab_scheduling:
         st.subheader("📅 Scheduling")
+
         st.markdown(
             "Carica le preferenze da `preferences.json` e produce lo schedule finale "
-            "tramite OR-Tools CP-SAT + Refinement Maximin. **Non chiama LLaMA.**"
+            "tramite OR-Tools CP-SAT + Refinement Maximin, oppure tramite Drafting "
+            "LLM con riparazione iterativa. **Non chiama LLaMA per l'estrazione "
+            "preferenze**, già fatta nello Stage 1."
         )
 
         if not has_preferences():
@@ -418,94 +596,171 @@ def main():
                 f"Draft: `{os.path.basename(draft_path)}`"
             )
 
-            if st.button("▶ Avvia Scheduling", type="primary",
-                         use_container_width=True, disabled=not has_preferences()):
+            if st.button(
+                    "▶ Avvia Scheduling",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=not has_preferences()
+            ):
+
+                # ── LOG HANDLER ─────────────────────────────
                 handler = _attach_log_handler()
                 os.chdir(ROOT)
+
                 prog = st.progress(0, text="Carico preferenze...")
+
                 try:
+                    # ── IMPORT LOCALI ─────────────────────────
                     from agents.preference_agent import load_preferences
                     from input.model_draft_parser import parse_model_draft
-                    from agents.drafting_agent import solve
+                    from agents.drafting.solver_drafting import SolverDraftingAgent
+                    from agents.drafting.llm_drafting import LLMDraftingAgent
                     from agents.verification_agent import verify, evaluate_fairness
                     from agents.refinement_agent import refine
+                    from output.schedule_output import export_to_csv
 
+                    # ── DATA LOAD ─────────────────────────────
                     workers = load_preferences(prefs_path())
-                    draft   = parse_model_draft(draft_path)
+                    draft = parse_model_draft(draft_path)
 
-                    prog.progress(20, text="Stage 2 — OR-Tools CP-SAT...")
+                    prog.progress(20, text="Stage 2 — Drafting...")
+
                     model_out = os.path.join(ROOT, "output", "cp_model_partial.txt")
-                    schedule = solve(workers=workers, draft=draft, model_export_path=model_out)
+
+                    # ── AGENT SELECTION ───────────────────────
+                    mode_label = st.session_state.get("drafting_mode", "Solver")
+
+                    if mode_label == "Solver":
+                        drafting_agent = SolverDraftingAgent()
+                    else:
+                        drafting_agent = LLMDraftingAgent()
+
+                    st.info(f"Drafting attivo: **{mode_label}**")
+
+                    # ── STAGE 2 ───────────────────────────────
+                    #print("-----DEBUG APP.PY (490)", workers)
+                    schedule = drafting_agent.solve(
+                        workers=workers,
+                        draft=draft,
+                        model_export_path=model_out
+                    )
+
                     if schedule is None:
-                        st.error("❌ Il solver non ha trovato soluzioni.")
+                        st.error("❌ Nessuna soluzione trovata dal Drafting Agent.")
+                        with st.expander("📋 Log di questo tentativo", expanded=True):
+                            st.code(handler.get_log_text(), language=None)
                         st.stop()
+
                     st.success("✅ Stage 2 — Schedule generato")
 
+                    # ── STAGE 3 ───────────────────────────────
                     prog.progress(60, text="Stage 3 — Verifica vincoli...")
-                    is_valid, violations = verify(schedule, draft)
-                    if not is_valid:
-                        st.error(f"❌ {len(violations)} violazioni:")
-                        for v in violations: st.markdown(f"- {v}")
+
+                    report = verify(schedule, draft)
+
+                    if not report.feasible:
+                        st.error(f"❌ {report.total_violations} violazioni:")
+                        for v in report.all_violations:
+                            st.markdown(f"- {v}")
+                        if report.suggestions:
+                            st.info("Suggerimenti del Verification Agent:")
+                            for s in report.suggestions:
+                                st.markdown(f"- {s}")
+                        with st.expander("📋 Log di questo tentativo", expanded=True):
+                            st.code(handler.get_log_text(), language=None)
                         st.stop()
+
                     evaluate_fairness(schedule)
-                    st.success(f"✅ Stage 3 — Valido · min soddisfazione: **{schedule.min_satisfaction():.3f}**")
 
+                    st.success(
+                        f"✅ Stage 3 — Valido · min soddisfazione: "
+                        f"**{schedule.min_satisfaction():.3f}**"
+                    )
+
+                    # ── STAGE 4 ───────────────────────────────
                     prog.progress(80, text="Stage 4 — Refinement Maximin...")
-                    final = refine(schedule, draft)
-                    st.success(f"✅ Stage 4 — Min finale: **{final.min_satisfaction():.3f}**")
 
+                    final = refine(schedule, drafting_agent, draft)
+
+                    st.success(
+                        f"✅ Stage 4 — Min finale: **{final.min_satisfaction():.3f}**"
+                    )
+
+                    # ── SAVE ────────────────────────────────
                     st.session_state["final_schedule"] = final
                     st.session_state["use_case"] = use_case
 
-                    from output.schedule_output import export_to_csv
-                    export_to_csv(final, os.path.join(ROOT, "output", f"schedule_use_case_{use_case}.csv"))
+                    export_to_csv(
+                        final,
+                        os.path.join(ROOT, "output", f"schedule_use_case_{use_case}.csv")
+                    )
 
                     prog.progress(100, text="Completato.")
                     st.balloons()
+
                     st.info("📊 Vai al tab **Risultati** per visualizzare lo schedule.")
 
                 except Exception as e:
                     st.error(f"Errore: {e}")
                     raise
+
                 finally:
+                    # ── LOG FINAL CAPTURE ─────────────────────
+                    log_text = handler.get_log_text()
                     _detach_log_handler(handler)
 
-                with st.expander("📋 Log"):
-                    st.code(handler.get_log_text(), language=None)
+                    st.session_state["last_logs"] = log_text
+
+            # ── LOG VIEWER (STABILE FUORI DAL BUTTON) ─────
+            if "last_logs" in st.session_state:
+                with st.expander("📋 Log dell’ultima esecuzione", expanded=False):
+                    st.code(st.session_state["last_logs"], language=None)
 
     # ── TAB CONFRONTO ─────────────────────────────────────────────────────────
     with tab_compare:
-        st.subheader("⚖️ Confronto: LLM vs Preferenze Neutre")
+        st.subheader("⚖️ Confronto a tre scenari: A / B / C")
         st.markdown(
-            "Usa le stesse preferenze estratte da LLaMA per due run paralleli:\n"
-            "- **Con preferenze LLM**: schedule con preferenze reali\n"
-            "- **Baseline senza preferenze**: stesso modello, preferenze tutte neutre (baseline senza LLM)\n\n"
-            "Il confronto sulle metriche oggettive dimostra quantitativamente "
-            "il contributo dell'LLM."
+            "Usa le **steste preferenze**, estratte da LLaMA **una sola volta**, "
+            "per tre run indipendenti che cambiano SOLO la strategia di drafting:\n\n"
+            "- **Scenario A** — solo vincoli hard, nessuna preferenza nell'obiettivo\n"
+            "- **Scenario B** — vincoli hard + preferenze + Drafting **OR-Tools**\n"
+            "- **Scenario C** — vincoli hard + preferenze + Drafting **LLM** (con "
+            "riparazione iterativa)\n\n"
+            "Le metriche di fairness sono calcolate sugli stessi lavoratori "
+            "(le stesse preferenze reali) in tutti e tre gli scenari, così il "
+            "confronto isola l'unica variabile che cambia: il Drafting Agent."
         )
 
         if not has_preferences():
             st.warning("⚠️ Esegui prima **Stage 1** per estrarre le preferenze.")
         else:
             prefs = load_prefs_summary()
-            st.info(f"Preferenze disponibili: **{len(prefs)} lavoratori**")
+            st.info(
+                f"Preferenze disponibili: **{len(prefs)} lavoratori** "
+                "(condivise da tutti e tre gli scenari)"
+            )
 
-            if st.button("▶ Avvia Confronto", type="primary",
+            if st.button("▶ Avvia Confronto A / B / C", type="primary",
                          use_container_width=True, disabled=not has_preferences()):
                 handler = _attach_log_handler()
                 os.chdir(ROOT)
-                prog = st.progress(0, text="Inizializzazione...")
+                prog = st.progress(0, text="Scenario A — solo vincoli hard...")
                 try:
-                    from agents.evaluation_agent import run_comparison
+                    from agents.evaluation_agent import run_three_way_comparison
 
-                    prog.progress(10, text="Con preferenze LLM — Schedule con preferenze LLM...")
-                    result = run_comparison(
+                    result = run_three_way_comparison(
                         preferences_path=prefs_path(),
                         draft_file=draft_path,
                         output_dir=os.path.join(ROOT, "output"),
                     )
                     prog.progress(100, text="Confronto completato.")
-                    st.session_state["comparison"] = result
+                    st.session_state["comparison3"] = result
+                    st.session_state["comparison3_uc"] = use_case
+
+                    # Salva su disco così da poterlo richiamare istantaneamente
+                    # dal tab Demo durante l'esame, senza rieseguire nulla.
+                    save_comparison(use_case, result)
+
                     st.balloons()
 
                 except Exception as e:
@@ -517,86 +772,48 @@ def main():
                 with st.expander("📋 Log"):
                     st.code(handler.get_log_text(), language=None)
 
-        if "comparison" in st.session_state:
-            import pandas as pd
-            import plotly.express as px  # Usiamo Plotly per eliminare il grafico a pila
+        if "comparison3" in st.session_state:
+            render_comparison_results(
+                st.session_state["comparison3"],
+                uc=st.session_state.get("comparison3_uc", use_case),
+                key_prefix="cmp",
+            )
 
-            result = st.session_state["comparison"]
-            ml = result.metrics_with_llm
-            mn = result.metrics_neutral
-            st.session_state["final_schedule"] = result.schedule_with_llm
+    # ── TAB DEMO (risultati precompilati) ────────────────────────────────────
+    with tab_demo:
+        st.subheader("🖥️ Demo (risultati precompilati)")
+        st.markdown(
+            "Mostra **istantaneamente** i risultati del Confronto A/B/C già "
+            "calcolati in precedenza per lo Use Case scelto, esattamente come "
+            "nel tab **Confronto**, senza rieseguire nulla.\n\n"
+            "Per popolare questa scheda, nel tab **Confronto**, "
+            "seleziona lo Use Case desiderato nella sidebar ed esegui il "
+            "Confronto: il risultato viene salvato automaticamente e resterà "
+            "disponibile qui anche dopo un riavvio dell'app."
+        )
 
-            st.divider()
-            st.header("🎯 Risultati del Confronto Globale")
+        demo_uc = st.radio(
+            "Use Case da visualizzare",
+            ["A", "B"],
+            horizontal=True,
+            key="demo_uc_choice",
+            format_func=lambda x: (
+                "A — 13 lavoratori omogenei"
+                if x == "A"
+                else "B — 13 standard + 7 specializzati"
+            ),
+        )
 
-            # SEZIONE 1: LE METRICHE CHIAVE (Soddisfazione e Violazioni prima di tutto)
-            sat_llm = result.schedule_with_llm.satisfaction_scores
-            sat_neu = result.schedule_neutral.satisfaction_scores
-            avg_sat_llm = sum(sat_llm.values()) / len(sat_llm) if sat_llm else 0.0
-            avg_sat_neu = sum(sat_neu.values()) / len(sat_neu) if sat_neu else 0.0
-
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Soddisfazione Media",
-                      f"{avg_sat_llm:.3f}",
-                      delta=f"{avg_sat_llm - avg_sat_neu:+.3f} vs Baseline (Senza LLM)")
-
-            c2.metric("Violazioni con LLM",
-                      f"{ml['violations']['global_total_violations']}",
-                      delta=f"{ml['violations']['global_total_violations'] - mn['violations']['global_total_violations']}",
-                      delta_color="inverse")
-
-            c3.metric("Violazioni Senza LLM (Baseline)",
-                      f"{mn['violations']['global_total_violations']}")
-
-            # SEZIONE 2: IL GRAFICO DELLA SODDISFAZIONE (Barre affiancate)
-            st.subheader("📊 Confronto Soddisfazione Individuale dei Lavoratori")
-            st.caption(
-                "Più la barra è alta, più il lavoratore è felice delle sue turnazioni. La baseline senza LLM è fissa a 0.5 (neutra).")
-
-            rows_sat = []
-            for w in result.workers_with_llm:
-                rows_sat.append({"Lavoratore": w.worker_id, "Configurazione": "SmartScheduler (Con LLM)",
-                                 "Soddisfazione": sat_llm.get(w.worker_id, 0.5)})
-                rows_sat.append({"Lavoratore": w.worker_id, "Configurazione": "Baseline (Senza LLM)",
-                                 "Soddisfazione": sat_neu.get(w.worker_id, 0.5)})
-
-            df_sat = pd.DataFrame(rows_sat)
-            fig_sat = px.bar(df_sat, x="Lavoratore", y="Soddisfazione", color="Configurazione",
-                             barmode="group", color_discrete_map={"SmartScheduler (Con LLM)": "#2E75B6",
-                                                                  "Baseline (Senza LLM)": "#A6A6A6"})
-            fig_sat.update_layout(yaxis_range=[0, 1.05])
-            st.plotly_chart(fig_sat, use_container_width=True)
-
-            # SEZIONE 3: TABELLA DETTAGLIATA
-            st.subheader("📋 Dettaglio Turni Notturni Assegnati")
-            rows_table = []
-            for w in result.workers_with_llm:
-                wid = w.worker_id
-                rows_table.append({
-                    "Lavoratore": wid,
-                    "Preferisce": ", ".join(w.preferred_shifts) or "—",
-                    "Evita": ", ".join(w.avoid_shifts) or "—",
-                    "Notti (Con LLM)": ml["night_counts"].get(wid, 0),
-                    "Notti (Senza LLM)": mn["night_counts"].get(wid, 0),
-                })
-            st.dataframe(pd.DataFrame(rows_table), use_container_width=True, hide_index=True)
-
-            # SEZIONE 4: METRICHE STRUTTURALI (Declassate in fondo per completezza accademica)
-            with st.expander("📈 Visualizza Metriche di Bilanciamento Matematico (Opzionali)"):
-                st.caption("Questi dati mostrano solo l'uniformità numerica dei turni, ignorando i desideri umani.")
-                cc1, cc2, cc3 = st.columns(3)
-                cc1.metric("Dev. Standard Notti", f"{ml['std_nights']:.3f}",
-                           delta=f"{ml['std_nights'] - mn['std_nights']:+.3f} vs neutro", delta_color="off")
-                cc2.metric("Indice di Gini Notti", f"{ml['gini_nights']:.3f}",
-                           delta=f"{ml['gini_nights'] - mn['gini_nights']:+.3f} vs neutro", delta_color="off")
-                cc3.metric("Forbice Notti (Max-Min)", f"{ml['max_nights'] - ml['min_nights']}",
-                           delta=f"{(ml['max_nights'] - ml['min_nights']) - (mn['max_nights'] - mn['min_nights'])} vs neutro",
-                           delta_color="off")
-
-            # Download
-            st.divider()
-            with open(prefs_path(), "rb") as f:
-                st.download_button("⬇️ preferences.json", data=f, file_name="preferences.json", mime="application/json")
+        if not has_comparison(demo_uc):
+            st.warning(
+                f"⚠️ Nessun risultato precompilato per lo Use Case **{demo_uc}**. "
+                f"Vai al tab **Confronto**, seleziona lo Use Case {demo_uc} nella "
+                "sidebar ed esegui il Confronto almeno una volta."
+            )
+        else:
+            demo_result = load_comparison(demo_uc)
+            st.success(f"✅ Risultati precompilati per lo Use Case {demo_uc} caricati.")
+            render_comparison_results(demo_result, uc=demo_uc, key_prefix=f"demo_{demo_uc.lower()}")
 
     # ── TAB RISULTATI ─────────────────────────────────────────────────────────
     with tab_results:

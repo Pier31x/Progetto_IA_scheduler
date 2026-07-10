@@ -8,14 +8,33 @@ per tutti i parametri strutturali. Il model_builder non conosce
 hardcoded nessun vincolo — delega tutto a constraints.py, che a sua
 volta legge i parametri dal draft. Questo rende il sistema
 completamente guidato dal file di input istituzionale.
+
+Supporto al "pinning" (novità)
+-------------------------------
+`build_model` accetta ora un parametro opzionale `pinned_assignments`:
+una lista di `Assignment` che DEVONO comparire nella soluzione finale
+(vincoli di uguaglianza `x[w,d,s] == 1`).
+
+Perché serve: il Drafting Agent basato su LLM propone alcune
+assegnazioni guidate dalle preferenze dei lavoratori (Stage 2). Invece
+di provare a completare lo schedule con un motore greedy fatto a mano
+(che deve reimplementare ogni singolo vincolo hard e può restare
+bloccato in un punto fisso), le "blocchiamo" nel modello CP-SAT e
+lasciamo che il solver — esatto, con backtracking — completi il resto
+garantendo la fattibilità. Le assegnazioni bloccate vengono validate
+(hard-constraint-safe) PRIMA di arrivare qui, quindi nella grande
+maggioranza dei casi il modello risultante è risolvibile; se comunque
+risultasse INFEASIBLE, la responsabilità è di chi ha scelto cosa
+bloccare, non di questa funzione.
 """
 
 from datetime import date, timedelta
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from ortools.sat.python import cp_model
 
 from models.worker import Worker
+from models.assignment import Assignment
 from input.model_draft_parser import ModelDraft
 from solver.constraints import (
     Vars,
@@ -26,7 +45,8 @@ from solver.constraints import (
     add_monthly_shift_count,
     add_coverage,
 )
-
+from models.worker import Worker
+from models.assignment import Assignment
 
 def _generate_days(draft: ModelDraft) -> List[date]:
     days = []
@@ -40,6 +60,7 @@ def _generate_days(draft: ModelDraft) -> List[date]:
 def build_model(
     workers: List[Worker],
     draft: ModelDraft,
+    pinned_assignments: Optional[List[Assignment]] = None,
 ) -> Tuple[cp_model.CpModel, Vars, List[date]]:
     """
     Costruisce il modello CP-SAT con variabili e vincoli hard.
@@ -47,6 +68,11 @@ def build_model(
     Args:
         workers: lista dei lavoratori con preferenze
         draft: model draft istituzionale (turni, vincoli, copertura)
+        pinned_assignments: assegnazioni da forzare a 1 nel modello
+            (tipicamente proposte da un Drafting Agent LLM a monte).
+            Ignorate silenziosamente se referenziano una combinazione
+            (worker, day, shift) fuori dall'orizzonte pianificato o con
+            un tipo di turno non valido.
 
     Returns:
         (model, x, days)
@@ -71,6 +97,26 @@ def build_model(
     add_max_weekly_hours(model, x, workers, draft)
     add_monthly_shift_count(model, x, workers, draft)
     add_coverage(model, x, workers, draft)
+
+    # Pinning: forza a 1 le assegnazioni proposte a monte (es. da un
+    # Drafting Agent LLM). Tutti gli altri vincoli hard sopra si
+    # applicano comunque su queste variabili come su tutte le altre —
+    # non è un bypass, è semplicemente fissare il valore di alcune
+    # variabili prima della risoluzione.
+    n_pinned = 0
+    if pinned_assignments:
+        for a in pinned_assignments:
+            key = (a.worker_id, a.day, a.shift_type)
+            if key in x:
+                model.Add(x[key] == 1)
+                n_pinned += 1
+
+    print("Workers:", len(workers))
+    print("Days:", len(days))
+    print("Shifts:", len(draft.shift_names))
+    print("Total vars:", len(workers) * len(days) * len(draft.shift_names))
+    if pinned_assignments:
+        print(f"Pinned assignments: {n_pinned}/{len(pinned_assignments)} applicate")
 
     return model, x, days
 
@@ -183,19 +229,29 @@ def export_model_summary(
         f.write("\n".join(lines))
 
 
+
 def extract_schedule_from_solution(
     workers: List[Worker],
-    x: Vars,
+    x,
     days: List[date],
     shift_types: List[str],
     solver: cp_model.CpSolver,
-) -> Dict:
-    """Estrae le assegnazioni positive dalla soluzione del solver."""
-    assignments = {}
+) -> List[Assignment]:
+    """Estrae le assegnazioni dalla soluzione del solver (formato unificato)."""
+
+    assignments: List[Assignment] = []
+
     for worker in workers:
         for day in days:
             for s in shift_types:
-                key = (worker.worker_id, day, s)
-                if solver.value(x[key]):
-                    assignments[key] = True
+                if solver.value(x[(worker.worker_id, day, s)]):
+
+                    assignments.append(
+                        Assignment(
+                            worker_id=worker.worker_id,
+                            day=day,
+                            shift_type=s,
+                        )
+                    )
+
     return assignments

@@ -9,7 +9,7 @@ preferenze dei lavoratori per una ragione semantica precisa — i vincoli
 istituzionali (legge, contratto collettivo) sono fissi e dettati
 dall'ospedale, mentre le preferenze sono individuali e raccolte per
 ogni ciclo di scheduling. Questa separazione rispecchia la realtà
-operativa: il responsabile HR carica il model draft una volta, poi
+operativa: il responsabile carica il model draft una volta, poi
 raccoglie le preferenze dai lavoratori.
 
 Il parser è puramente deterministico: nessun LLM coinvolto.

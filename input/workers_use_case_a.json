@@ -4,12 +4,12 @@
     {
       "worker_id": "W01",
       "role": "standard",
-      "statement": "A me piace giocare a calcio"
+      "statement": "Detesto lavorare nei festivi"
     },
     {
       "worker_id": "W02",
       "role": "standard",
-      "statement": "Io lunedì ho il calcetto"
+      "statement": "Sono disponibile sempre, a qualsiasi ora e per qualsiasi emergenza"
     },
     {
       "worker_id": "W03",
@@ -44,7 +44,7 @@
     {
       "worker_id": "W09",
       "role": "standard",
-      "statement": "Ogni domenica mangio la pasta"
+      "statement": "Amo lavorare di notte"
     },
     {
       "worker_id": "W10",

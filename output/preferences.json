@@ -3,17 +3,24 @@
     "worker_id": "W01",
     "role": "standard",
     "preferred_shifts": [
-      "morning"
+      "morning",
+      "afternoon"
     ],
     "avoid_shifts": [
       "night"
     ],
     "preferred_days_off": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
       "sunday"
     ],
-    "night_tolerance": 0.0,
+    "night_tolerance": 0.5,
     "holiday_tolerance": 0.5,
-    "emergency_availability": 0
+    "emergency_availability": 4
   },
   {
     "worker_id": "W02",
@@ -22,13 +29,21 @@
       "morning",
       "afternoon"
     ],
-    "avoid_shifts": [],
+    "avoid_shifts": [
+      "night"
+    ],
     "preferred_days_off": [
-      "saturday"
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday"
     ],
     "night_tolerance": 0.5,
     "holiday_tolerance": 0.5,
-    "emergency_availability": 0
+    "emergency_availability": 1
   },
   {
     "worker_id": "W03",
@@ -39,36 +54,61 @@
     "avoid_shifts": [
       "night"
     ],
-    "preferred_days_off": [],
+    "preferred_days_off": [
+      "tuesday",
+      "thursday",
+      "friday",
+      "sunday"
+    ],
     "night_tolerance": 0.5,
-    "holiday_tolerance": 1.0,
-    "emergency_availability": 0
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 1
   },
   {
     "worker_id": "W04",
     "role": "standard",
-    "preferred_shifts": [],
-    "avoid_shifts": [],
+    "preferred_shifts": [
+      "morning",
+      "afternoon"
+    ],
+    "avoid_shifts": [
+      "night"
+    ],
     "preferred_days_off": [
-      "monday"
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday"
     ],
     "night_tolerance": 0.5,
     "holiday_tolerance": 0.5,
-    "emergency_availability": 0
+    "emergency_availability": 1
   },
   {
     "worker_id": "W05",
     "role": "standard",
     "preferred_shifts": [
-      "morning"
+      "morning",
+      "afternoon"
     ],
     "avoid_shifts": [
       "night"
     ],
-    "preferred_days_off": [],
+    "preferred_days_off": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday"
+    ],
     "night_tolerance": 0.5,
-    "holiday_tolerance": 1.0,
-    "emergency_availability": 2
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 1
   },
   {
     "worker_id": "W06",
@@ -76,24 +116,25 @@
     "preferred_shifts": [
       "afternoon"
     ],
-    "avoid_shifts": [],
-    "preferred_days_off": [],
+    "avoid_shifts": [
+      "night"
+    ],
+    "preferred_days_off": [
+      "tuesday",
+      "thursday",
+      "friday",
+      "sunday"
+    ],
     "night_tolerance": 0.5,
     "holiday_tolerance": 0.5,
-    "emergency_availability": 2
+    "emergency_availability": 1
   },
   {
     "worker_id": "W07",
     "role": "standard",
-    "preferred_shifts": [
-      "morning",
-      "afternoon"
-    ],
+    "preferred_shifts": [],
     "avoid_shifts": [],
-    "preferred_days_off": [
-      "friday",
-      "saturday"
-    ],
+    "preferred_days_off": [],
     "night_tolerance": 0.5,
     "holiday_tolerance": 0.5,
     "emergency_availability": 0
@@ -114,23 +155,35 @@
       "wednesday",
       "thursday",
       "friday",
-      "saturday"
+      "saturday",
+      "sunday"
     ],
     "night_tolerance": 0.5,
-    "holiday_tolerance": 1.0,
-    "emergency_availability": 0
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 1
   },
   {
     "worker_id": "W09",
     "role": "standard",
     "preferred_shifts": [
+      "morning",
+      "afternoon"
+    ],
+    "avoid_shifts": [
       "night"
     ],
-    "avoid_shifts": [],
-    "preferred_days_off": [],
-    "night_tolerance": 1.0,
+    "preferred_days_off": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday"
+    ],
+    "night_tolerance": 0.5,
     "holiday_tolerance": 0.5,
-    "emergency_availability": 0
+    "emergency_availability": 1
   },
   {
     "worker_id": "W10",
@@ -138,149 +191,87 @@
     "preferred_shifts": [
       "morning"
     ],
-    "avoid_shifts": [],
-    "preferred_days_off": [
-      "wednesday"
-    ],
-    "night_tolerance": 0.5,
-    "holiday_tolerance": 0.5,
-    "emergency_availability": 0
-  },
-  {
-    "worker_id": "W11",
-    "role": "standard",
-    "preferred_shifts": [],
-    "avoid_shifts": [],
-    "preferred_days_off": [],
-    "night_tolerance": 0.5,
-    "holiday_tolerance": 0.5,
-    "emergency_availability": 0
-  },
-  {
-    "worker_id": "W12",
-    "role": "standard",
-    "preferred_shifts": [
-      "morning",
-      "afternoon"
-    ],
     "avoid_shifts": [
+      "afternoon",
       "night"
     ],
-    "preferred_days_off": [],
-    "night_tolerance": 0.5,
-    "holiday_tolerance": 1.0,
-    "emergency_availability": 0
-  },
-  {
-    "worker_id": "W13",
-    "role": "standard",
-    "preferred_shifts": [],
-    "avoid_shifts": [],
     "preferred_days_off": [
       "monday",
       "tuesday",
       "wednesday",
       "thursday",
-      "friday"
-    ],
-    "night_tolerance": 0.5,
-    "holiday_tolerance": 0.5,
-    "emergency_availability": 0
-  },
-  {
-    "worker_id": "S01",
-    "role": "specialized",
-    "preferred_shifts": [
-      "morning"
-    ],
-    "avoid_shifts": [],
-    "preferred_days_off": [],
-    "night_tolerance": 0.5,
-    "holiday_tolerance": 0.5,
-    "emergency_availability": 0
-  },
-  {
-    "worker_id": "S02",
-    "role": "specialized",
-    "preferred_shifts": [
-      "morning",
-      "afternoon"
-    ],
-    "avoid_shifts": [
-      "night"
-    ],
-    "preferred_days_off": [],
-    "night_tolerance": 0.0,
-    "holiday_tolerance": 1.0,
-    "emergency_availability": 0
-  },
-  {
-    "worker_id": "S03",
-    "role": "specialized",
-    "preferred_shifts": [
-      "morning",
-      "afternoon"
-    ],
-    "avoid_shifts": [],
-    "preferred_days_off": [
+      "friday",
       "saturday",
       "sunday"
     ],
     "night_tolerance": 0.5,
     "holiday_tolerance": 0.5,
-    "emergency_availability": 0
+    "emergency_availability": 1
   },
   {
-    "worker_id": "S04",
-    "role": "specialized",
-    "preferred_shifts": [
-      "afternoon"
-    ],
-    "avoid_shifts": [
-      "night"
-    ],
-    "preferred_days_off": [],
-    "night_tolerance": 0.5,
-    "holiday_tolerance": 1.0,
-    "emergency_availability": 0
-  },
-  {
-    "worker_id": "S05",
-    "role": "specialized",
-    "preferred_shifts": [],
-    "avoid_shifts": [],
-    "preferred_days_off": [],
-    "night_tolerance": 0.5,
-    "holiday_tolerance": 0.5,
-    "emergency_availability": 0
-  },
-  {
-    "worker_id": "S06",
-    "role": "specialized",
-    "preferred_shifts": [
-      "morning"
-    ],
-    "avoid_shifts": [
-      "night"
-    ],
-    "preferred_days_off": [],
-    "night_tolerance": 0.5,
-    "holiday_tolerance": 0.5,
-    "emergency_availability": 0
-  },
-  {
-    "worker_id": "S07",
-    "role": "specialized",
+    "worker_id": "W11",
+    "role": "standard",
     "preferred_shifts": [
       "morning",
       "afternoon"
     ],
-    "avoid_shifts": [],
+    "avoid_shifts": [
+      "night"
+    ],
     "preferred_days_off": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
       "sunday"
     ],
     "night_tolerance": 0.5,
     "holiday_tolerance": 0.5,
-    "emergency_availability": 0
+    "emergency_availability": 1
+  },
+  {
+    "worker_id": "W12",
+    "role": "standard",
+    "preferred_shifts": [
+      "afternoon",
+      "night"
+    ],
+    "avoid_shifts": [
+      "night"
+    ],
+    "preferred_days_off": [
+      "tuesday",
+      "thursday",
+      "friday",
+      "sunday"
+    ],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 1
+  },
+  {
+    "worker_id": "W13",
+    "role": "standard",
+    "preferred_shifts": [
+      "morning",
+      "afternoon"
+    ],
+    "avoid_shifts": [
+      "night"
+    ],
+    "preferred_days_off": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday"
+    ],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 1
   }
 ]

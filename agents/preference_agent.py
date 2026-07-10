@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # ── Controllo disponibilità LLM ───────────────────────────────────────────────
 
 def check_llm_availability(
-    model: str = "llama3",
+    model: str = "llama3.2",
     base_url: str = "http://localhost:11434",
 ) -> tuple[bool, str]:
     """
@@ -86,17 +86,30 @@ class LLMBackend(ABC):
     @abstractmethod
     def is_available(self) -> bool: ...
     @abstractmethod
-    def call(self, prompt: str) -> str: ...
+    def call(
+        self,
+        prompt: str,
+        num_predict: Optional[int] = None,
+        num_ctx: Optional[int] = None,
+    ) -> str: ...
     @property
     @abstractmethod
     def name(self) -> str: ...
 
 
 class OllamaBackend(LLMBackend):
-    def __init__(self, model: str = "llama3", base_url: str = "http://localhost:11434"):
+    def __init__(
+        self,
+        model: str = "llama3",
+        base_url: str = "http://localhost:11434",
+        default_num_predict: int = 512,
+        default_num_ctx: Optional[int] = None,
+    ):
         self.model = model
         self.base_url = base_url
-        self.timeout = 60
+        self.timeout = 120
+        self.default_num_predict = default_num_predict
+        self.default_num_ctx = default_num_ctx
 
     @property
     def name(self) -> str:
@@ -108,18 +121,63 @@ class OllamaBackend(LLMBackend):
             logger.debug(f"[{self.name}] Non disponibile: {msg}")
         return available
 
-    def call(self, prompt: str) -> str:
+    def call(
+        self,
+        prompt: str,
+        num_predict: Optional[int] = None,
+        num_ctx: Optional[int] = None,
+    ) -> str:
+        """
+        `num_predict`/`num_ctx` sono opzionali e sovrascrivono i default
+        dell'istanza SOLO per questa chiamata. Questo permette allo
+        Stage 1 (una risposta breve per lavoratore) di usare i default
+        leggeri, mentre lo Stage 2 (drafting/repair, che deve generare
+        molte più righe di JSON) può richiedere un budget di token
+        molto più ampio senza appesantire tutte le altre chiamate.
+        """
+        effective_num_predict = num_predict if num_predict is not None else self.default_num_predict
+        options = {"temperature": 0.1, "num_predict": effective_num_predict}
+
+        effective_num_ctx = num_ctx if num_ctx is not None else self.default_num_ctx
+        if effective_num_ctx is not None:
+            options["num_ctx"] = effective_num_ctx
+
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": 0.1, "num_predict": 512},
+            "options": options,
         }
         response = requests.post(
             f"{self.base_url}/api/generate", json=payload, timeout=self.timeout
         )
         response.raise_for_status()
-        return response.json().get("response", "")
+        data = response.json()
+
+        # Ollama può rispondere con HTTP 200 e comunque segnalare un
+        # errore (modello in errore, memoria insufficiente, ecc.) nel
+        # campo "error", oppure con "response" vuoto se il modello non
+        # ha generato nulla entro num_predict o il prompt eccede il
+        # contesto (num_ctx).
+        # Solleviamo un errore esplicito con la diagnosi reale.
+        if "error" in data:
+            raise RuntimeError(
+                f"Ollama ({self.name}) ha restituito un errore: {data['error']}"
+            )
+
+        text = data.get("response", "")
+
+        if not text.strip():
+            raise RuntimeError(
+                f"Ollama ({self.name}) ha risposto senza contenuto "
+                f"(done={data.get('done')}, done_reason={data.get('done_reason')}). "
+                "Possibile causa: il prompt supera il contesto del modello "
+                "(num_ctx) oppure il modello non ha generato nulla entro "
+                "num_predict. Prova ad aumentare num_ctx/num_predict o a "
+                "usare un modello più piccolo/veloce."
+            )
+
+        return text
 
 
 # Backend in ordine di priorità: il primo disponibile viene usato
@@ -141,11 +199,8 @@ def _get_available_backend() -> Optional[LLMBackend]:
 
 
 # ── Prompt ────────────────────────────────────────────────────────────────────
-
 def _build_prompt(worker_id: str, role: str, statement: str) -> str:
-    return f"""Sei un assistente di pianificazione turni per un ospedale.
-Estrai le preferenze dalla dichiarazione del lavoratore (che può essere scritta in qualsiasi lingua) e restituisci
-un unico oggetto JSON valido con questo schema:
+    return f"""Sei un assistente ospedaliero. Estrai le preferenze dal testo e restituisci SOLO un oggetto JSON valido.
 
 {{
   "worker_id": "{worker_id}",
@@ -158,18 +213,22 @@ un unico oggetto JSON valido con questo schema:
   "emergency": 0
 }}
 
-Regole:
-- preferred_shifts / avoid_shifts: sottoinsiemi di ["morning", "afternoon", "night"]
-  (mattino=morning, pomeriggio=afternoon, notte=night)
-- preferred_days_off: sottoinsiemi di ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
-- night_tolerance: 0.0 (detesta i notturni) a 1.0 (indifferente o li preferisce)
-- holiday_tolerance: 0.0 (detesta i festivi) a 1.0 (indifferente)
-- emergency: intero 0-5, turni straordinari massimi al mese
-- Restituisci SOLO l'oggetto JSON. Nessun markdown, nessuna spiegazione.
+REGOLE ASSEGNAZIONE:
+- preferred_shifts: sottoinsieme di ["morning", "afternoon", "night"] (mattino, pomeriggio, notte) che il lavoratore PREFERISCE o AMA.
+- avoid_shifts: sottoinsieme di ["morning", "afternoon", "night"] che il lavoratore ODIA o VUOLE EVITARE (es. "no notte" -> ["night"]).
+- preferred_days_off: sottoinsieme di ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]. Inserisci SOLO il giorno specifico richiesto come LIBERO (es. "lunedì libero" -> ["monday"], "sabato e domenica liberi" -> ["saturday", "sunday"]).
+  ⚠️ ATTENZIONE: Se il lavoratore è flessibile, disponibile sempre o non specifica giorni di riposo, la lista DEVE ESSERE VUOTA: []. Non inventare o aggiungere giorni a caso.
+- night_tolerance: 0.0 (rifiuta notti), 0.25 (preferisce evitare), 0.5 (neutrale/non menzionato), 0.75 (disponibile), 1.0 (preferisce notti).
+- holiday_tolerance: 0.0 (detesta festivi/domeniche) a 1.0 (disponibile/li preferisce). Default 0.5 se non menzionato.
+- emergency: intero 0-5, numero massimo di straordinari/emergenze al mese dichiarati. Default 0 se non specificato.
+
+Restituisci SOLO il JSON pulito. No blocchi markdown (no ```json), no spiegazioni prima o dopo.
 
 Dichiarazione: "{statement}"
-
 JSON:"""
+
+
+
 
 
 def _extract_json(raw: str) -> dict:
@@ -220,18 +279,67 @@ _DAY_NORM = {
 
 def _normalize(data: dict) -> dict:
     """
-    Normalizza i valori prodotti dall'LLM:
-    - converte nomi in italiano → inglese
-    - rinomina 'emergency' → 'emergency_availability'
+    Sanitizza l'output del JSON creando un dizionario NUOVO di zecca.
+    Elimina i bug di sovrascrittura e leak di memoria tra i lavoratori.
     """
-    ns = lambda v: _SHIFT_NORM.get(v.lower(), v.lower())
-    nd = lambda v: _DAY_NORM.get(v.lower(), v.lower())
-    data["preferred_shifts"]   = [ns(s) for s in data.get("preferred_shifts", [])]
-    data["avoid_shifts"]       = [ns(s) for s in data.get("avoid_shifts", [])]
-    data["preferred_days_off"] = [nd(d) for d in data.get("preferred_days_off", [])]
-    if "emergency" in data and "emergency_availability" not in data:
-        data["emergency_availability"] = data.pop("emergency")
-    return data
+    # 1. Se il dato è corrotto o nullo, restituiamo un dizionario vuoto sicuro
+    if not data or not isinstance(data, dict):
+        return {}
+
+    # 2. CREIAMO UN DIZIONARIO COMPLETAMENTE NUOVO (Isolamento dei puntatori)
+    clean_profile = {
+        "worker_id": str(data.get("worker_id", "")).strip(),
+        "role": str(data.get("role", "")).strip(),
+        "preferred_shifts": [],
+        "avoid_shifts": [],
+        "preferred_days_off": [],
+        "night_tolerance": 0.5,
+        "holiday_tolerance": 0.5,
+        "emergency": 0
+    }
+
+    # 3. Estrazione e sanitizzazione dei Turni (con liste locali nuove)
+    valid_shifts = ["morning", "afternoon", "night"]
+
+    raw_pref = data.get("preferred_shifts", [])
+    if isinstance(raw_pref, list):
+        clean_profile["preferred_shifts"] = [str(s).lower().strip() for s in raw_pref if
+                                             str(s).lower().strip() in valid_shifts]
+
+    raw_avoid = data.get("avoid_shifts", [])
+    if isinstance(raw_avoid, list):
+        clean_profile["avoid_shifts"] = [str(s).lower().strip() for s in raw_avoid if
+                                         str(s).lower().strip() in valid_shifts]
+
+    # 4. Estrazione e sanitizzazione INDIPENDENTE dei Giorni Off
+    valid_days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    raw_days = data.get("preferred_days_off", [])
+
+    if isinstance(raw_days, list):
+        days_extracted = [str(d).lower().strip() for d in raw_days if str(d).lower().strip() in valid_days]
+        # Rimuove i duplicati mantenendo l'ordine
+        clean_profile["preferred_days_off"] = list(dict.fromkeys(days_extracted))
+
+    # 5. Parsing numerico sicuro (evita che stringhe o errori blocchino il dato)
+    try:
+        clean_profile["night_tolerance"] = max(0.0, min(1.0, float(data.get("night_tolerance", 0.5))))
+    except (ValueError, TypeError):
+        clean_profile["night_tolerance"] = 0.5
+
+    try:
+        clean_profile["holiday_tolerance"] = max(0.0, min(1.0, float(data.get("holiday_tolerance", 0.5))))
+    except (ValueError, TypeError):
+        clean_profile["holiday_tolerance"] = 0.5
+
+    try:
+        # Controlliamo sia "emergency" che "emergency_availability"
+        em_val = data.get("emergency", data.get("emergency_availability", 0))
+        clean_profile["emergency"] = max(0, min(5, int(float(em_val))))
+    except (ValueError, TypeError):
+        clean_profile["emergency"] = 0
+
+    # Restituiamo il profilo atomico e clonato
+    return clean_profile
 
 
 # ── Preferenze neutre ─────────────────────────────────────────────────────────

@@ -59,19 +59,16 @@ def print_schedule(schedule: Schedule) -> None:
 
 
 def export_to_csv(schedule: Schedule, filepath: str) -> None:
-    """
-    Esporta lo schedule in formato CSV.
-    Colonne: worker_id, date, shift_type
-    """
     import csv
+
     rows = []
-    for (wid, day, shift), assigned in schedule.assignments.items():
-        if assigned:
-            rows.append({
-                "worker_id": wid,
-                "date": day.isoformat(),
-                "shift_type": shift,
-            })
+
+    for a in schedule.assignments:
+        rows.append({
+            "worker_id": a.worker_id,
+            "date": a.day.isoformat(),
+            "shift_type": a.shift_type,
+        })
 
     rows.sort(key=lambda r: (r["date"], r["shift_type"], r["worker_id"]))
 
@@ -79,5 +76,3 @@ def export_to_csv(schedule: Schedule, filepath: str) -> None:
         writer = csv.DictWriter(f, fieldnames=["worker_id", "date", "shift_type"])
         writer.writeheader()
         writer.writerows(rows)
-
-    print(f"Schedule esportato in: {filepath}")

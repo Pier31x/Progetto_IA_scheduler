@@ -27,16 +27,21 @@ USAGE — Terminale
 PROJECT STRUCTURE
 -----------------
   app.py                     Interfaccia web Streamlit
-  main.py                    Entry point CLI
-  input/
-    model_draft_*.txt        Input istituzionale (turni, vincoli)
-    model_draft_parser.py    Parser del model draft
-    workers_*.json           Preferenze lavoratori in NL
-  agents/
+    agents/
+        /drafting
+        base.py             Interfaccia per i drafter
+        llm_drafting        Drafting che usa l'LLM
+        prompt_builder      File usato da llm_drafting per gestire i prompt
+        scheduler_drafting  Drafting che usa il solver
+        scheduler_parser    Prende
     preference_agent.py      Stage 1: NL -> Worker
     drafting_agent.py        Stage 2: OR-Tools solve
     verification_agent.py    Stage 3: verifica simbolica
     refinement_agent.py      Stage 4: loop Maximin
+  input/
+    model_draft_parser.py    Parser del model draft (i vincoli hard)
+    model_draft_use_case_*.txt
+    workers_*.json           Preferenze lavoratori in NL
   solver/
     model_builder.py         Costruzione modello CP-SAT
     constraints.py           Vincoli hard

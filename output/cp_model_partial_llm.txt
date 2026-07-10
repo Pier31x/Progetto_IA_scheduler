@@ -1,0 +1,62 @@
+======================================================================
+SMARTSCHEDULER — LLM Drafting Prompt (Partial)
+======================================================================
+
+Sei un sistema di pianificazione turni ospedaliera. Genera uno schedule completo
+per il periodo dal 2026-12-07 al 2027-01-06 (31 giorni)
+che rispetti ESATTAMENTE tutti i vincoli hard elencati sotto, e che massimizzi la soddisfazione
+delle preferenze dei lavoratori.
+
+[TURNI DISPONIBILI]
+- morning: 08:00-14:00, durata 6h, peso 1
+- afternoon: 14:00-20:00, durata 6h, peso 1
+- night: 20:00-08:00, durata 12h, peso 2
+
+[FORZA LAVORO]
+Ruoli e numerosità: standard:13
+
+[COPERTURA MINIMA RICHIESTA — per ogni giorno, per ogni turno]
+- morning: almeno 2 lavoratori (qualsiasi ruolo)
+- afternoon: almeno 2 lavoratori (qualsiasi ruolo)
+- night: almeno 2 lavoratori (qualsiasi ruolo)
+
+[VINCOLI HARD — NON NEGOZIABILI]
+- Ogni lavoratore copre al massimo 1 turno per giorno solare.
+- Nessun turno consecutivo tra giorni adiacenti (es. pomeriggio di un giorno + mattino del giorno dopo NON è ammesso).
+- Dopo ogni turno notturno, il lavoratore deve avere 2 giorni completamente liberi (nessun turno).
+- Massimo 36 ore lavorative per lavoratore per settimana (settimane da 7 giorni a partire dal 2026-12-07).
+- Ogni lavoratore deve coprire ESATTAMENTE 25 unità-turno nell'intero periodo (il turno notturno vale 2 unità, gli altri 1 unità). QUESTO È IL VINCOLO PIÙ FACILE DA VIOLARE: conta con attenzione quante unità stai assegnando a ciascun lavoratore.
+- Uno specializzato può coprire il ruolo standard, ma uno standard non può coprire un turno che richiede uno specializzato.
+
+[LAVORATORI E PREFERENZE]
+- W01 | ruolo=standard | preferiti=[] | evitati=[] | giorni_liberi_preferiti=[] | tolleranza_notte=0.5 | tolleranza_festivi=0.5 | disponibilita_straordinaria=0
+- W02 | ruolo=standard | preferiti=[] | evitati=['night'] | giorni_liberi_preferiti=['monday'] | tolleranza_notte=0.5 | tolleranza_festivi=0.5 | disponibilita_straordinaria=0
+- W03 | ruolo=standard | preferiti=['afternoon'] | evitati=['night'] | giorni_liberi_preferiti=[] | tolleranza_notte=0.5 | tolleranza_festivi=1.0 | disponibilita_straordinaria=0
+- W04 | ruolo=standard | preferiti=[] | evitati=[] | giorni_liberi_preferiti=['monday'] | tolleranza_notte=0.5 | tolleranza_festivi=0.5 | disponibilita_straordinaria=0
+- W05 | ruolo=standard | preferiti=['morning'] | evitati=['night'] | giorni_liberi_preferiti=[] | tolleranza_notte=0.5 | tolleranza_festivi=1.0 | disponibilita_straordinaria=2
+- W06 | ruolo=standard | preferiti=['afternoon'] | evitati=[] | giorni_liberi_preferiti=[] | tolleranza_notte=0.5 | tolleranza_festivi=0.5 | disponibilita_straordinaria=2
+- W07 | ruolo=standard | preferiti=['morning', 'afternoon'] | evitati=[] | giorni_liberi_preferiti=['friday', 'saturday'] | tolleranza_notte=0.5 | tolleranza_festivi=0.5 | disponibilita_straordinaria=0
+- W08 | ruolo=standard | preferiti=['morning', 'afternoon'] | evitati=['night'] | giorni_liberi_preferiti=['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] | tolleranza_notte=0.5 | tolleranza_festivi=1.0 | disponibilita_straordinaria=0
+- W09 | ruolo=standard | preferiti=[] | evitati=[] | giorni_liberi_preferiti=['sunday'] | tolleranza_notte=0.0 | tolleranza_festivi=0.0 | disponibilita_straordinaria=0
+- W10 | ruolo=standard | preferiti=['morning'] | evitati=[] | giorni_liberi_preferiti=['wednesday'] | tolleranza_notte=0.5 | tolleranza_festivi=0.5 | disponibilita_straordinaria=0
+- W11 | ruolo=standard | preferiti=[] | evitati=[] | giorni_liberi_preferiti=[] | tolleranza_notte=0.5 | tolleranza_festivi=0.5 | disponibilita_straordinaria=0
+- W12 | ruolo=standard | preferiti=['morning', 'afternoon'] | evitati=['night'] | giorni_liberi_preferiti=[] | tolleranza_notte=0.5 | tolleranza_festivi=1.0 | disponibilita_straordinaria=0
+- W13 | ruolo=standard | preferiti=[] | evitati=[] | giorni_liberi_preferiti=['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] | tolleranza_notte=0.5 | tolleranza_festivi=0.5 | disponibilita_straordinaria=0
+
+[FORMATO DI OUTPUT — OBBLIGATORIO, RISPETTA ESATTAMENTE QUESTO FORMATO PER RISPARMIARE SPAZIO]
+Restituisci SOLO un array JSON valido (nessun testo prima o dopo, nessun markdown, nessun blocco ```),
+dove ogni elemento è una TRIPLA POSIZIONALE [worker_id, data, tipo_turno] — NON un oggetto con chiavi:
+
+[
+  ["W01", "2026-12-07", "morning"],
+  ["W02", "2026-12-07", "night"],
+  ...
+]
+
+Non usare oggetti {"worker_id": ...}: usa SOLO array di 3 elementi come sopra, per minimizzare la
+lunghezza dell'output. L'array deve contenere tutte le assegnazioni necessarie a coprire l'intero
+periodo rispettando i vincoli hard sopra elencati. Non aggiungere spiegazioni, commenti o testo
+fuori dall'array JSON. Se lo spazio di generazione è limitato, dai priorità a completare l'array
+piuttosto che a formattarlo con spazi/indentazione superflui.
+
+JSON:

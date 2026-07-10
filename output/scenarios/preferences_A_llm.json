@@ -1,0 +1,181 @@
+[
+  {
+    "worker_id": "W01",
+    "role": "standard",
+    "preferred_shifts": [],
+    "avoid_shifts": [],
+    "preferred_days_off": [],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "W02",
+    "role": "standard",
+    "preferred_shifts": [],
+    "avoid_shifts": [
+      "night"
+    ],
+    "preferred_days_off": [
+      "monday"
+    ],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "W03",
+    "role": "standard",
+    "preferred_shifts": [
+      "afternoon"
+    ],
+    "avoid_shifts": [
+      "night"
+    ],
+    "preferred_days_off": [],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 1.0,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "W04",
+    "role": "standard",
+    "preferred_shifts": [],
+    "avoid_shifts": [],
+    "preferred_days_off": [
+      "monday"
+    ],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "W05",
+    "role": "standard",
+    "preferred_shifts": [
+      "morning"
+    ],
+    "avoid_shifts": [
+      "night"
+    ],
+    "preferred_days_off": [],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 1.0,
+    "emergency_availability": 2
+  },
+  {
+    "worker_id": "W06",
+    "role": "standard",
+    "preferred_shifts": [
+      "afternoon"
+    ],
+    "avoid_shifts": [],
+    "preferred_days_off": [],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 2
+  },
+  {
+    "worker_id": "W07",
+    "role": "standard",
+    "preferred_shifts": [
+      "morning",
+      "afternoon"
+    ],
+    "avoid_shifts": [],
+    "preferred_days_off": [
+      "friday",
+      "saturday"
+    ],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "W08",
+    "role": "standard",
+    "preferred_shifts": [
+      "morning",
+      "afternoon"
+    ],
+    "avoid_shifts": [],
+    "preferred_days_off": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday"
+    ],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "W09",
+    "role": "standard",
+    "preferred_shifts": [],
+    "avoid_shifts": [],
+    "preferred_days_off": [
+      "sunday"
+    ],
+    "night_tolerance": 0,
+    "holiday_tolerance": 0,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "W10",
+    "role": "standard",
+    "preferred_shifts": [
+      "morning"
+    ],
+    "avoid_shifts": [],
+    "preferred_days_off": [
+      "wednesday"
+    ],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "W11",
+    "role": "standard",
+    "preferred_shifts": [],
+    "avoid_shifts": [],
+    "preferred_days_off": [],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "W12",
+    "role": "standard",
+    "preferred_shifts": [
+      "morning",
+      "afternoon"
+    ],
+    "avoid_shifts": [
+      "night"
+    ],
+    "preferred_days_off": [],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 1.0,
+    "emergency_availability": 0
+  },
+  {
+    "worker_id": "W13",
+    "role": "standard",
+    "preferred_shifts": [],
+    "avoid_shifts": [],
+    "preferred_days_off": [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday"
+    ],
+    "night_tolerance": 0.5,
+    "holiday_tolerance": 0.5,
+    "emergency_availability": 0
+  }
+]

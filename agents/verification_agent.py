@@ -5,11 +5,26 @@ Stage 3: verifica simbolica dello schedule prodotto dal Drafting Agent.
 
 Tutti i parametri vengono letti dal ModelDraft, non da costanti globali.
 La verifica è interamente deterministica — nessun LLM coinvolto.
+
+L'output di `verify()` è un `VerificationReport`: un dataclass che separa
+le violazioni per categoria (invece del precedente `(bool, list[str])`),
+così che:
+
+    - il Drafting Agent LLM possa costruire repair prompt mirati,
+      sapendo ESATTAMENTE quale categoria di vincolo è coinvolta;
+    - il Feasibility Analyzer possa leggere suggerimenti già pronti,
+      generati qui in modo deterministico, senza dover reinterpretare
+      stringhe di log;
+    - la UI (tab Risultati/Confronto) possa mostrare un riepilogo
+      strutturato invece di una lista piatta di messaggi.
 """
 
+from __future__ import annotations
+
 import logging
+from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from models.worker import Worker
 from models.schedule import Schedule
@@ -17,8 +32,113 @@ from input.model_draft_parser import ModelDraft
 from solver.fairness import compute_satisfaction_scores
 
 logger = logging.getLogger(__name__)
+
 ViolationReport = List[str]
 
+
+# ──────────────────────────────────────────────────────────────────────
+# VerificationReport
+# ──────────────────────────────────────────────────────────────────────
+
+@dataclass
+class VerificationReport:
+    """
+    Esito strutturato della verifica simbolica di una schedule.
+
+    `feasible` è True se e solo se tutte le liste di violazioni sono
+    vuote. `total_violations` è la somma di tutte le violazioni hard
+    (non include i suggerimenti, che sono testo derivato).
+    """
+
+    feasible: bool
+    one_shift: List[str] = field(default_factory=list)
+    rest_after_night: List[str] = field(default_factory=list)
+    weekly_hours: List[str] = field(default_factory=list)
+    monthly_workload: List[str] = field(default_factory=list)
+    coverage: List[str] = field(default_factory=list)
+    consecutive_shifts: List[str] = field(default_factory=list)
+    suggestions: List[str] = field(default_factory=list)
+    total_violations: int = 0
+
+    @property
+    def all_violations(self) -> List[str]:
+        """Tutte le violazioni hard concatenate, indipendentemente dalla categoria."""
+        return (
+            self.one_shift
+            + self.rest_after_night
+            + self.weekly_hours
+            + self.monthly_workload
+            + self.coverage
+            + self.consecutive_shifts
+        )
+
+    def category_counts(self) -> Dict[str, int]:
+        """Numero di violazioni per categoria, utile per logging/UI."""
+        return {
+            "one_shift": len(self.one_shift),
+            "rest_after_night": len(self.rest_after_night),
+            "weekly_hours": len(self.weekly_hours),
+            "monthly_workload": len(self.monthly_workload),
+            "coverage": len(self.coverage),
+            "consecutive_shifts": len(self.consecutive_shifts),
+        }
+
+
+def _build_suggestions(report: VerificationReport) -> List[str]:
+    """
+    Genera suggerimenti human-readable in base alle categorie di
+    violazione popolate nel report. Sono pensati per essere sia
+    mostrati in UI sia iniettati nel repair prompt per l'LLM.
+    """
+
+    suggestions: List[str] = []
+
+    if report.coverage:
+        suggestions.append(
+            f"Copertura ({len(report.coverage)} violazioni): "
+            "assegnare un altro lavoratore disponibile ai turni scoperti."
+        )
+
+    if report.weekly_hours:
+        suggestions.append(
+            f"Ore settimanali ({len(report.weekly_hours)} violazioni): "
+            "spostare turni dai lavoratori sovraccarichi verso lavoratori "
+            "con margine settimanale residuo."
+        )
+
+    if report.rest_after_night:
+        suggestions.append(
+            f"Riposo dopo la notte ({len(report.rest_after_night)} violazioni): "
+            "rimuovere le assegnazioni immediatamente successive ai turni notturni."
+        )
+
+    if report.monthly_workload:
+        suggestions.append(
+            f"Carico mensile ({len(report.monthly_workload)} violazioni): "
+            "riequilibrare le unità-turno tra i lavoratori per avvicinarsi "
+            "al target mensile previsto."
+        )
+
+    if report.one_shift:
+        suggestions.append(
+            f"Turni per giorno ({len(report.one_shift)} violazioni): "
+            "rimuovere i turni in eccesso assegnati allo stesso lavoratore "
+            "nello stesso giorno."
+        )
+
+    if report.consecutive_shifts:
+        suggestions.append(
+            f"Turni consecutivi ({len(report.consecutive_shifts)} violazioni): "
+            "rimuovere il turno di mattina assegnato il giorno successivo a "
+            "un pomeriggio dello stesso lavoratore."
+        )
+
+    return suggestions
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Helper vincoli
+# ──────────────────────────────────────────────────────────────────────
 
 def _all_days(draft: ModelDraft) -> List[date]:
     days = []
@@ -62,6 +182,38 @@ def _check_rest_after_night(schedule: Schedule, draft: ModelDraft) -> ViolationR
                             f"{worker.worker_id}: turno {s} il {rest_day.isoformat()} "
                             f"dopo notte del {day.isoformat()}"
                         )
+    return violations
+
+
+def _check_no_consecutive_shifts(schedule: Schedule, draft: ModelDraft) -> ViolationReport:
+    """
+    Replica simbolica del vincolo C2 del solver OR-Tools
+    (`solver/constraints.add_no_consecutive_shifts`):
+
+        ∀w, ∀d: x[w,d,afternoon] + x[w,d+1,morning] ≤ 1
+
+    Un lavoratore non può fare il turno di pomeriggio un giorno e il
+    turno di mattina il giorno immediatamente successivo. È un vincolo
+    distinto da "riposo dopo la notte" (che riguarda solo i turni di
+    notte) e da "un turno al giorno" (che riguarda lo stesso giorno).
+    """
+    violations = []
+    days = _all_days(draft)
+    days_set = set(days)
+
+    for worker in schedule.workers:
+        for day in days:
+            next_day = day + timedelta(days=1)
+            if next_day not in days_set:
+                continue
+            if (
+                schedule.is_assigned(worker.worker_id, day, "afternoon")
+                and schedule.is_assigned(worker.worker_id, next_day, "morning")
+            ):
+                violations.append(
+                    f"{worker.worker_id}: pomeriggio il {day.isoformat()} seguito "
+                    f"da mattina il {next_day.isoformat()} (turni consecutivi non ammessi)"
+                )
     return violations
 
 
@@ -142,28 +294,64 @@ def _check_coverage(schedule: Schedule, draft: ModelDraft) -> ViolationReport:
     return violations
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Entry point
+# ──────────────────────────────────────────────────────────────────────
+
 def verify(
     schedule: Schedule, draft: ModelDraft
-) -> Tuple[bool, ViolationReport]:
-    """Verifica tutti i vincoli hard. Restituisce (is_valid, violations)."""
-    all_violations: ViolationReport = []
+) -> VerificationReport:
+    """
+    Verifica tutti i vincoli hard e restituisce un `VerificationReport`
+    strutturato per categoria, con suggerimenti human-readable allegati.
+    """
 
-    checks = [
-        ("Turni per giorno",    _check_one_shift_per_day(schedule, draft)),
-        ("Riposo post-notte",   _check_rest_after_night(schedule, draft)),
-        ("Ore settimanali",     _check_weekly_hours(schedule, draft)),
-        ("Turni mensili",       _check_monthly_count(schedule, draft)),
-        ("Copertura turni",     _check_coverage(schedule, draft)),
+    one_shift = _check_one_shift_per_day(schedule, draft)
+    rest_after_night = _check_rest_after_night(schedule, draft)
+    weekly_hours = _check_weekly_hours(schedule, draft)
+    monthly_workload = _check_monthly_count(schedule, draft)
+    coverage = _check_coverage(schedule, draft)
+    consecutive_shifts = _check_no_consecutive_shifts(schedule, draft)
+
+    named_checks = [
+        ("Turni per giorno", one_shift),
+        ("Riposo post-notte", rest_after_night),
+        ("Ore settimanali", weekly_hours),
+        ("Turni mensili", monthly_workload),
+        ("Copertura turni", coverage),
+        ("Turni consecutivi", consecutive_shifts),
     ]
 
-    for name, violations in checks:
+    for name, violations in named_checks:
         if violations:
             logger.warning(f"[{name}] {len(violations)} violazioni")
-            all_violations.extend(violations)
         else:
             logger.info(f"[{name}] OK")
 
-    return len(all_violations) == 0, all_violations
+    total_violations = (
+        len(one_shift)
+        + len(rest_after_night)
+        + len(weekly_hours)
+        + len(monthly_workload)
+        + len(coverage)
+        + len(consecutive_shifts)
+    )
+
+    report = VerificationReport(
+        feasible=total_violations == 0,
+        one_shift=one_shift,
+        rest_after_night=rest_after_night,
+        weekly_hours=weekly_hours,
+        monthly_workload=monthly_workload,
+        coverage=coverage,
+        consecutive_shifts=consecutive_shifts,
+        suggestions=[],
+        total_violations=total_violations,
+    )
+
+    report.suggestions = _build_suggestions(report)
+
+    return report
 
 
 def evaluate_fairness(schedule: Schedule) -> Dict[str, float]:

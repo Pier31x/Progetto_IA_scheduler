@@ -45,18 +45,18 @@ SMARTSCHEDULER — OR-Tools CP-SAT Model (Partial)
   standard: 13 workers
 
   Workers list:
-    W01 (standard): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.8
-    W02 (standard): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.8
-    W03 (standard): prefer=[], avoid=['morning', 'afternoon'], night_tol=0.8
-    W04 (standard): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.8
-    W05 (standard): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.5
-    W06 (standard): prefer=[], avoid=[], night_tol=0.5
-    W07 (standard): prefer=[], avoid=[], night_tol=0.8
-    W08 (standard): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.5
-    W09 (standard): prefer=[], avoid=['morning', 'afternoon'], night_tol=0.8
-    W10 (standard): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.8
-    W11 (standard): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.8
-    W12 (standard): prefer=[], avoid=[], night_tol=0.2
-    W13 (standard): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.8
+    W01 (standard): prefer=[], avoid=[], night_tol=0.5
+    W02 (standard): prefer=[], avoid=['night'], night_tol=0.5
+    W03 (standard): prefer=['afternoon'], avoid=['night'], night_tol=0.5
+    W04 (standard): prefer=[], avoid=[], night_tol=0.5
+    W05 (standard): prefer=['morning'], avoid=['night'], night_tol=0.5
+    W06 (standard): prefer=['afternoon'], avoid=[], night_tol=0.5
+    W07 (standard): prefer=['morning', 'afternoon'], avoid=[], night_tol=0.5
+    W08 (standard): prefer=['morning', 'afternoon'], avoid=[], night_tol=0.5
+    W09 (standard): prefer=[], avoid=[], night_tol=0.0
+    W10 (standard): prefer=['morning'], avoid=[], night_tol=0.5
+    W11 (standard): prefer=[], avoid=[], night_tol=0.5
+    W12 (standard): prefer=['morning', 'afternoon'], avoid=['night'], night_tol=0.5
+    W13 (standard): prefer=[], avoid=[], night_tol=0.5
 
 ======================================================================

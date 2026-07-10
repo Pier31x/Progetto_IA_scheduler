@@ -16,11 +16,9 @@ from typing import Dict, List, Tuple
 
 from models.worker import Worker
 from models.shift import Shift
-
+from models.assignment import Assignment
 
 # Tipo alias per chiarezza: (worker_id, day, shift_type) -> assegnato (bool)
-Assignment = Dict[Tuple[str, date, str], bool]
-
 
 @dataclass
 class Schedule:
@@ -37,14 +35,16 @@ class Schedule:
             per ogni lavoratore, calcolati dal Verification Agent
     """
 
-    assignments: Assignment = field(default_factory=dict)
+    assignments: List[Assignment] = field(default_factory=list)
     workers: List[Worker] = field(default_factory=list)
     shifts: List[Shift] = field(default_factory=list)
     satisfaction_scores: Dict[str, float] = field(default_factory=dict)
 
     def is_assigned(self, worker_id: str, day: date, shift_type: str) -> bool:
-        """Restituisce True se il lavoratore è assegnato al turno dato."""
-        return self.assignments.get((worker_id, day, shift_type), False)
+        return any(
+            a.worker_id == worker_id and a.day == day and a.shift_type == shift_type
+            for a in self.assignments
+        )
 
     def get_worker_shifts(self, worker_id: str) -> List[Shift]:
         """Restituisce tutti i turni assegnati a un lavoratore."""
