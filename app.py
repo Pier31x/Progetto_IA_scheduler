@@ -293,7 +293,7 @@ def render_comparison_results(result, uc: str, key_prefix: str) -> None:
         col.metric("Soddisfazione media", f"{m['avg_satisfaction']:.3f}")
         col.metric("Soddisfazione minima", f"{m['min_satisfaction']:.3f}")
         col.metric("Preferenze soddisfatte", f"{m['preference_satisfaction_pct']:.1f}%")
-        col.metric("Allineamento Straordinari", f"{m.get('emergency_alignment', 1.0) * 100:.1f}%")
+        #col.metric("Allineamento Straordinari", f"{m.get('emergency_alignment', 1.0) * 100:.1f}%")
 
     # SEZIONE 2: soddisfazione individuale per scenario
     st.subheader("📊 Confronto Soddisfazione Individuale dei Lavoratori")
@@ -333,8 +333,7 @@ def render_comparison_results(result, uc: str, key_prefix: str) -> None:
                 "Scenario": sc.label,
                 "Turni Notturni": m["night_distribution"].get(w.worker_id, 0),
                 "Turni Festivi": m.get("holiday_distribution", {}).get(w.worker_id, 0),
-                "Straordinari Assegnati": m.get("overtime_distribution", {}).get(w.worker_id, 0)
-                # Assicurati che esista in _fairness_metrics o adattalo
+                # "Straordinari Assegnati": m.get("overtime_distribution", {}).get(w.worker_id, 0)
             })
 
     df_dist = pd.DataFrame(rows_distribution)
