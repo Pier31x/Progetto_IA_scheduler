@@ -261,6 +261,23 @@ def _check_monthly_count(schedule: Schedule, draft: ModelDraft) -> ViolationRepo
 
 
 def _check_coverage(schedule: Schedule, draft: ModelDraft) -> ViolationReport:
+    """
+    Verifica i requisiti di copertura minima per turno.
+
+    Use Case A: controllo sul totale dei presenti (tutti omogenei).
+
+    Use Case B: verifica speculare al vincolo del solver corretto.
+        La traccia dice che uno specializzato PUÒ coprire il ruolo standard,
+        quindi le due condizioni da verificare sono:
+            1. n_spe ≥ min_specialized  (gli specializzati non sono sostituibili)
+            2. n_std + n_spe ≥ min_standard + min_specialized  (copertura totale)
+
+        CORREZIONE rispetto alla versione precedente:
+        Il vecchio check `n_std < cov.min_standard` era troppo restrittivo e
+        avrebbe segnalato come violazione configurazioni valide come
+        (1 std + 2 spe) con min_standard=2, min_specialized=1, che invece
+        la traccia ammette esplicitamente come esempio valido.
+    """
     violations = []
     days = _all_days(draft)
 
@@ -271,26 +288,36 @@ def _check_coverage(schedule: Schedule, draft: ModelDraft) -> ViolationReport:
                         if schedule.is_assigned(w.worker_id, day, s)]
 
             if cov.min_specialized == 0:
-                # Use Case A
+                # ── Use Case A: copertura omogenea ────────────────────────────
                 if len(assigned) < cov.min_standard:
                     violations.append(
                         f"Copertura: {day.isoformat()} {s} — "
                         f"{len(assigned)} lavoratori (min {cov.min_standard})"
                     )
             else:
-                # Use Case B
+                # ── Use Case B: copertura eterogenea ──────────────────────────
                 n_std = sum(1 for w in assigned if w.role == "standard")
                 n_spe = sum(1 for w in assigned if w.role == "specialized")
+
+                # Verifica 1: presenza minima di specializzati (non sostituibili).
                 if n_spe < cov.min_specialized:
                     violations.append(
                         f"Copertura: {day.isoformat()} {s} — "
                         f"solo {n_spe} specializzati (min {cov.min_specialized})"
                     )
-                if n_std < cov.min_standard:
+
+                # Verifica 2: copertura totale del turno.
+                # Gli specializzati in eccesso rispetto a min_specialized
+                # coprono i posti standard rimanenti.
+                total_required = cov.min_standard + cov.min_specialized
+                if n_std + n_spe < total_required:
                     violations.append(
                         f"Copertura: {day.isoformat()} {s} — "
-                        f"solo {n_std} standard (min {cov.min_standard})"
+                        f"totale presenti {n_std + n_spe} (min {total_required}: "
+                        f"{n_std} std + {n_spe} spe, specializzati possono coprire "
+                        f"slot standard)"
                     )
+
     return violations
 
 

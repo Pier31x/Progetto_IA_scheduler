@@ -151,34 +151,69 @@ def add_coverage(
     """
     Vincolo di copertura minima per turno, ricavato dal ModelDraft.
 
-    Use Case A: Σ_w x[w,d,s] ≥ min_standard (tutti omogenei)
-    Use Case B: Σ_{standard} x[w,d,s] ≥ min_standard
-                Σ_{specialized} x[w,d,s] ≥ min_specialized
+    Use Case A: tutti i lavoratori sono omogenei.
+        Formulazione: ∀d, ∀s: Σ_w x[w,d,s] ≥ min_standard
+
+    Use Case B: lavoratori standard e specializzati, con la regola che uno
+        specializzato PUÒ coprire il ruolo standard se necessario.
+        Dalla traccia: "a shift may be covered by one standard and two
+        specialized workers", quindi un turno valido può avere n_std < min_standard
+        purché il totale n_std + n_spe soddisfi la copertura complessiva.
+
+        Formulazione corretta:
+            ∀d, ∀s: n_spe[d,s] ≥ min_specialized
+            ∀d, ∀s: n_std[d,s] + n_spe[d,s] ≥ min_standard + min_specialized
+
+        La prima garantisce la presenza minima di specializzati nel loro ruolo
+        specifico. La seconda garantisce che il totale dei presenti copra
+        l'intero fabbisogno, permettendo agli specializzati di riempire
+        slot standard quando i lavoratori standard non bastano.
+
+        Esempio (min_standard=2, min_specialized=1):
+            - 2 std + 1 spe → n_spe=1 ≥ 1 ✓ | n_std+n_spe=3 ≥ 3 ✓ → valido
+            - 1 std + 2 spe → n_spe=2 ≥ 1 ✓ | n_std+n_spe=3 ≥ 3 ✓ → valido (traccia)
+            - 0 std + 3 spe → n_spe=3 ≥ 1 ✓ | n_std+n_spe=3 ≥ 3 ✓ → valido
+            - 2 std + 0 spe → n_spe=0 < 1 ✗ → non valido (manca lo specializzato)
+            - 1 std + 1 spe → n_spe=1 ≥ 1 ✓ | n_std+n_spe=2 < 3 ✗ → non valido
 
     Scelta progettuale: una sola funzione gestisce entrambi i use case
     leggendo la specifica di copertura dal ModelDraft, evitando
-    duplicazione di codice tra add_coverage_use_case_a e _b.
+    duplicazione di codice.
     """
     days = _all_days(draft)
 
     for day in days:
         for cov in draft.coverage:
             s = cov.shift_type
+
             if cov.min_specialized == 0:
-                # Use Case A: copertura omogenea
+                # ── Use Case A: copertura omogenea ────────────────────────────
+                # Tutti i lavoratori sono equivalenti: basta il totale.
                 model.add(
                     sum(x[w.worker_id, day, s] for w in workers) >= cov.min_standard
                 )
             else:
-                # Use Case B: copertura eterogenea
+                # ── Use Case B: copertura eterogenea ──────────────────────────
                 std = [w for w in workers if w.role == "standard"]
                 spe = [w for w in workers if w.role == "specialized"]
 
                 n_std = sum(x[w.worker_id, day, s] for w in std)
                 n_spe = sum(x[w.worker_id, day, s] for w in spe)
 
-                # Almeno min_specialized specializzati
+                # Vincolo 1: almeno min_specialized specializzati presenti.
+                # Gli specializzati hanno competenze che gli standard non possono
+                # sostituire, quindi questa soglia non è mai abbassabile.
                 model.add(n_spe >= cov.min_specialized)
-                # Almeno min_standard che svolgono funzione standard
-                # (standard puri + specializzati che coprono ruolo standard)
-                model.add(n_std >= cov.min_standard)
+
+                # Vincolo 2: il totale dei presenti (std + spe) deve coprire
+                # l'intero fabbisogno del turno (min_standard + min_specialized).
+                # Questo permette agli specializzati di coprire slot standard
+                # quando necessario, come esplicitato dalla traccia.
+                #
+                # CORREZIONE rispetto alla versione precedente:
+                # Il vecchio vincolo `n_std >= min_standard` era troppo restrittivo:
+                # escludeva configurazioni valide come (1 std + 2 spe) con
+                # min_standard=2, min_specialized=1, che la traccia ammette
+                # esplicitamente come esempio valido.
+                total_required = cov.min_standard + cov.min_specialized
+                model.add(n_std + n_spe >= total_required)
